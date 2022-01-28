@@ -93,7 +93,7 @@ Docker использует технологию ядра Linux cgroups, кот�
 
 ### CRI-O, containerd, runc
 
-![Containers](images/docker/containers_interfaces.png)
+![Containers](images/docker/containerd_crio_runc.png)
 
 * `Container Runtime Interface` (`CRI`) — это API, который Kubernetes использует для управления различными Container
   Runtime, создающими и управляющими контейнерами. CRI упрощает для Kubernetes использование различных Container
