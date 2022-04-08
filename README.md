@@ -21,7 +21,10 @@
 ## Домашние задания
 
 1. [CI/CD](https://github.com/bmstu-rsoi/lab1-template)
-1. [Microservices](https://github.com/bmstu-rsoi/lab2-template)
+2. [Microservices](https://github.com/bmstu-rsoi/lab2-template)
+3. [Fault Tolerance](https://github.com/bmstu-rsoi/lab3-template)
+4. [Deploy to k8s cluster](https://github.com/bmstu-rsoi/lab4-template)
+5. [OAuth2 Authorization](https://github.com/bmstu-rsoi/lab5-template)
 
 ## Контакты
 
