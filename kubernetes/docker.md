@@ -244,6 +244,8 @@ ENTRYPOINT ["java", "org.springframework.boot.loader.JarLauncher"]
 
 ```dockerfile
 FROM ubuntu:20.04
+RUN apt-get update && \
+    apt-get install iputils-ping -y
 ENTRYPOINT ["/bin/ping"]
 CMD ["localhost"]
 ```
@@ -405,22 +407,22 @@ NETWORK ID     NAME      DRIVER    SCOPE
 023f4b24772f   none                  null      local
 340fa41db593   postgres-network      bridge    local
 
-$ docker run \
+$ docker run -d \
       --name postgres \
       -e POSTGRES_USER=program \
       -e POSTGRES_PASSWORD=test \
-      -e POSTGRES_DB=services \
+      -e POSTGRES_DB=simple_backend \
       --network postgres-network \
       postgres:13
 
-$ docker run \
-      -p 8480:8480 \
-      --name store-service \
+$ docker run -d \
+      -p 8080:8080 \
+      --name simple-backend \
       --network postgres-network \
       -e SPRING_PROFILES_ACTIVE=docker \
       romanowalex/store-service:v1.0
 
-$ docker inspect -f "{{json .NetworkSettings.Networks }}" store-service | jq
+$ docker inspect -f "{{json .NetworkSettings.Networks }}" simple-backend | jq
 {
   "bridge": {
     ...

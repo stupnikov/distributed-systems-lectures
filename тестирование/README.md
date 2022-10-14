@@ -81,7 +81,8 @@
 ## Unit тесты
 
 Unit-тесты – важная составляющая программы, которая гарантирует работоспособность каждой части программы в отдельности.
-У нас есть [сервис](src/main/java/ru/digitalhabbits/sbt/service/UserServiceImpl.java):
+Рассмотрим класс `UserServiceImpl` с методом createUserWithWallet создания пользователя и кошелька, обсудим что нужно
+тестировать. В классе будет использовать MapStruct для маппинга `@Entity` -> DTO.
 
 ```java
 
@@ -89,23 +90,22 @@ Unit-тесты – важная составляющая программы, к
 @RequiredArgsConstructor
 public class UserServiceImpl
         implements UserService {
-    private final UserMapper userMapper;
     private final UserRepository userRepository;
-    private final NotificationService notificationService;
-
+    private final UserMapper userMapper;
+    private final WalletSerice walletSerice;
+     
     ...
 
     @Override
     @Transactional
-    public UserInfoResponse createUser(CreateUserRequest request) {
+    public UserReponse createUserWithWallet(@NotNull CreateUserRequest request) {
         User user = new User()
-                .setFirstName(request.getFirstName())
-                .setMiddleName(request.getMiddleName())
-                .setLastName(request.getLastName())
-                .setAge(request.getAge());
-
+                .setUserName(request.getUserName())
+                .setAddress(request.getAddress());
         user = userRepository.save(user);
-        notificationService.notify(EventType.CREATED, user.toString());
+
+        final Wallet wallet = walletSerice.createWalletForUser(request, user);
+        user.setWallet(wallet);
 
         return userMapper.toModel(user);
     }
@@ -114,13 +114,16 @@ public class UserServiceImpl
 }
 ```
 
-В нем есть метод `createUser` – создание нового пользователя. Метод состоит из вызова `userRepository.save(...)` – слой
-работы с базой данных и вызова другого сервиса `notificationService.notify(...)`. Для unit-тестирования нас _не
-интересует_ корректность поведения других сервисов, мы проверяем логику работы `UserService`, а вызовы в другие сервисы
-мы мокируем. Корректность работы других сервисов мы проверяем в соответствующих unit-тестах. В результате мы получаем
-гарантию, что каждый сервис работает корректно в случае, если корректно работают сервисы, которые он вызывает.
-Unit-тесты не дают гарантию, что система работает корректно (!), но они дают _надежду_, что при рефакторинге поведение
-изменяемых классов остается корректным.
+При написании теста на метод `createUserWithWallet` мы видим две внешние зависимости: `userMapper` и `walletService`.
+`WalletService` является классом из другой доменной области, а значит его поведение некорректно тестировать в рамках
+метода `createUserWithWallet`, т.к. в unit тестах нас не интересует корректность поведения других сервисов, отличных от
+тестируемого, соответственного вместо `WalletService` мы вправе использовать заглушку (Mockito Mock).
+
+С вызовом метода `userMapper.toModel(user)` все сложнее, т.к. это сгенерированный с помощью `MapStruct` маппер,
+который `@Entity` преобразует в DTO через getter/setter на объектах. Заменять его моками в тестах не нужно, т.к. эта
+функциональность является частью бизнес процесса класса. Раньше эти мапперы описывались в самом же классе как `private`
+метод, фактически MapStruct забрал на себя необходимость писать это руками, а значит это можно рассматривать как часть
+процесса выполнения основной доменной бизнес-логики.
 
 Для того чтобы тесты было проще писать, нужно чтобы проверяемый класс отвечал только за свою функциональность и не делал
 ничего больше, т.е. следовал принципу Single Responsibility. Если класс выполняем множество различных действий, то тест
