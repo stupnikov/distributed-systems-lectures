@@ -20,6 +20,9 @@ public class KafkaProducerApplication {
 
     private static final String TOPIC_NAME = "my-topic";
     private static final long SEND_TIMEOUT = 5000;
+    private static final String LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    private static long counter = 0;
 
     public static void main(String[] args) {
         SpringApplication.run(KafkaProducerApplication.class, args);
@@ -28,8 +31,15 @@ public class KafkaProducerApplication {
     @Bean
     public CommandLineRunner runner(KafkaTemplate<String, String> kafkaTemplate) {
         return args -> {
+            int length = 12;
             while (true) {
-                final String data = "Hello from producer: '" + randomAlphabetic(10) + "'";
+                final var z = (int) counter / 26;
+                final var idx = (int) counter % 26;
+                final var a = length - (z + 1);
+
+                final String data = "A".repeat(a) + LETTERS.charAt(idx) + "Z".repeat(z);
+                counter++;
+
                 kafkaTemplate.send(TOPIC_NAME, UUID.randomUUID().toString(), data);
                 logger.info("Send data to topic {}: '{}'", TOPIC_NAME, data);
                 Thread.sleep(SEND_TIMEOUT);
