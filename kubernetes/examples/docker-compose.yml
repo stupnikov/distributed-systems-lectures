@@ -17,9 +17,6 @@ services:
       - database-network
 
   simple-backend:
-    build:
-      context: ./simple-backend
-      dockerfile: Dockerfile
     image: romanowalex/simple-backend:v1.0
     container_name: simple-backend
     environment:
@@ -31,7 +28,6 @@ services:
       - frontend-network
 
   simple-frontend:
-    build: ./simple-frontend
     image: romanowalex/simple-frontend:v1.0
     container_name: simple-frontend
     restart: on-failure
