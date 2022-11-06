@@ -151,23 +151,23 @@ acca5451de93   romanowalex/simple-backend:v1.0    simple-backend    32.8kB (virt
 Образ использует AuFS (advanced multi-layered unification filesystem - вспомогательная файловая система, образующая
 каскадно-объединённое монтирование для файловых систем Linux) для прозрачного монтирования файловых систем.
 
-В папке `/var/lib/docker/overlay2` слови представлены папками, в папке l хранятся коротки ссылки на папки (diff) для
-использования в команде mount. В каждом образе хранится (кроме базового, там только link и diff):
+В папке `/var/lib/docker/overlay2` слови представлены папками, в папке `l` хранятся коротки ссылки на папки (`diff`) для
+использования в команде mount. В каждом образе хранится (кроме базового, там только `link` и `diff`):
 
-* link – файл, который содержит короткое имя директории из папки l;
-* lower – файл, который ссылается на короткое имя родителя;
-* diff – директория, которая содержит данные самого образа;
-* merged – актуальный контент этого образа (слитый с родительским diff);
-* work – для внутреннего использования в OverlayFS.
+* `link` – файл, который содержит короткое имя директории из папки `l`;
+* `lower` – файл, который ссылается на короткое имя родителя;
+* `diff` – директория, которая содержит данные самого образа;
+* `merged` – актуальный контент этого образа (слитый с родительским `diff`);
+* `work` – для внутреннего использования в OverlayFS.
 
-OverlayFS сливает два каталога и представляет их как один каталог. Эти каталоги называются слоями, а процесс объединения
-называется объединением. OverlayFS обращается к нижнему каталогу как к `lowerdir`, а к верхнему каталогу — как
-к `upperdir`. Унифицированное представление доступно через собственный каталог, который называется merged.
+OverlayFS сливает два каталога и представляет их как один каталог, эти каталоги называются слоям. OverlayFS обращается к
+нижнему каталогу как к `lowerdir`, а к верхнему каталогу — как к `upperdir`. Унифицированное представление доступно
+через собственный каталог, который называется merged.
 
 ![Merged Volume](images/docker/volume_merged.png)
 
-У каждого слоя изображения есть собственный каталог в `/var/lib/docker/overlay/`, который содержит его содержимое. (
-LayerID != directory ID)
+У каждого слоя изображения есть собственный каталог в `/var/lib/docker/overlay/`, который содержит его содержимое.
+(LayerID != directory ID)
 
 Начиная с версии Docker 1.10 образы и слои, больше не являются синонимами. Вместо этого образ напрямую ссылается на один
 или больше слоев, которые в конечном итоге сливаются в файловую систему контейнера.
@@ -180,9 +180,9 @@ LayerID != directory ID)
 Слои хранятся внутри аналогично образам. Они описываются в каталоге `/lib/docker/image/overlay2/layerdb/sha256/` и
 содержат связку между directory ID и Layer ID. Каждая из директорий содержит следующие файлы:
 
-* diff – содержит hash слоя и совпадает с именем директории;
-* size – физический размер слоя;
-* cache-id – содержит directory ID.
+* `diff` – содержит hash слоя (может не совпадать с именем директории);
+* `size` – физический размер слоя;
+* `cache-id` – содержит directory ID.
 
 ```shell
 $ cd examples/docker
@@ -280,20 +280,37 @@ drwx------  2 root root 4096 Nov  5 21:01 994393dc58e7931862558d06e46aa2bb174870
 drwx------  2 root root 4096 Nov  5 21:01 ad2999dcc3a48c967d0d5a498b564c3c93bb2c45c5403d70d42fe763283d13c4/
 drwx------  2 root root 4096 Nov  5 20:42 e07ee1baac5fae6a26f30cabfe54a36d3402f96afda318fe0a96cec4ca393359/
 
-# в cache-id хранится папка /var/lib/docker/overlay2/
-$ ls -l 994393dc58e7931862558d06e46aa2bb17487044f670f310dffe1d24e4d1eec7
--rw-r--r-- 1 root root    64 Nov  5 21:01 cache-id
--rw-r--r-- 1 root root    71 Nov  5 21:01 diff
--rw-r--r-- 1 root root     7 Nov  5 21:01 size
--rw-r--r-- 1 root root 20526 Nov  5 21:01 tar-split.json.gz
+# ищем слой 86565deff, где хранится docker-entrypoint.sh:
+# * в diff хранится sha слоя;
+# * в cache-id хранится папка /var/lib/docker/overlay2/.
+$ grep -RI '86565deff7509eb519ca0cce06484f6d6dcdabd50c2b3995768c27cccc1301c9' .
+./4dab68415bc6bc7655ecb95fb07e1d593903fc053820b165a9f36d3711f02806/diff:sha256:86565deff7509eb519ca0cce06484f6d6dcdabd50c2b3995768c27cccc1301c9
+
+$ cd 4dab68415bc6bc7655ecb95fb07e1d593903fc053820b165a9f36d3711f02806/
+
+$ ls -l
+-rw-r--r-- 1 root root  64 Nov  5 21:01 cache-id
+-rw-r--r-- 1 root root  71 Nov  5 21:01 diff
+-rw-r--r-- 1 root root  71 Nov  5 21:01 parent
+-rw-r--r-- 1 root root   5 Nov  5 21:01 size
+
+$ cat diff
+sha256:86565deff7509eb519ca0cce06484f6d6dcdabd50c2b3995768c27cccc1301c9
 
 $ cat cache-id
-9e6909cf6f857a19e27ca5e054dbfbd8c3d26f861e88213c4c697b3db9d4fd8f
+969c6ca1a5d0caf4aab84d89de31a4dd017f27be18adea13db70c6e480efc3cb
 
-$ ls -l /var/lib/docker/overlay2/9e6909cf6f857a19e27ca5e054dbfbd8c3d26f861e88213c4c697b3db9d4fd8f
--rw-------  1 root root    0 Nov  5 21:01 committed
-drwxr-xr-x 19 root root 4096 Nov  5 21:01 diff/
--rw-r--r--  1 root root   26 Nov  5 21:01 link
+$ cd /var/lib/docker/overlay2/969c6ca1a5d0caf4aab84d89de31a4dd017f27be18adea13db70c6e480efc3cb
+
+$ ls -l
+-rw------- 1 root root    0 Nov  5 21:07 committed
+drwxr-xr-x 3 root root 4.0K Nov  5 21:01 diff/
+-rw-r--r-- 1 root root   26 Nov  5 21:01 link
+-rw-r--r-- 1 root root  202 Nov  5 21:01 lower
+drwx------ 2 root root 4.0K Nov  5 21:01 work/
+
+$ ls -al diff/usr/local/bin/
+-rwxrwxr-x 1 root root 12K Oct  7 01:17 docker-entrypoint.sh*
 ```
 
 Для просмотра слоев контейнера удобно использовать утилиту [dive](https://github.com/wagoodman/dive).
