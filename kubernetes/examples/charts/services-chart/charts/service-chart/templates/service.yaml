@@ -4,12 +4,15 @@ metadata:
   name: {{ .Chart.Name }}
   labels:
     app.kubernetes.io/name: {{ .Chart.Name }}-service
+    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple-services
+    app.kubernetes.io/managed-by: helm
 spec:
   selector:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app: {{ .Chart.Name }}
   ports:
     - name: http
       protocol: TCP
-      port: {{ .Values.port.external }}
-      targetPort: {{ .Values.port.container }}
+      port: {{ .Values.service.port.external }}
+      targetPort: {{ .Values.service.port.container }}

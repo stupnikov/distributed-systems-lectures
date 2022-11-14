@@ -1,19 +1,41 @@
 simple-backend:
-  port:
-    container: 8080
-    external: 8080
-  image:
-    name: romanowalex/simple-backend
-    version: v1.0
-  enviroments:
-    SPRING_PROFILES_ACTIVE: docker
+  service:
+    port:
+      container: 8080
+      external: 8080
+    image:
+      name: romanowalex/simple-backend
+      version: v1.0
+    enviroments:
+      SPRING_PROFILES_ACTIVE: docker
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1024Mi
+      limits:
+        cpu: 500m
+        memory: 1024Mi
+    probes:
+      liveness: /backend/manage/health/liveness
+      readiness: /backend/manage/health/readiness
 
 simple-frontend:
   ingress:
     enabled: true
-  port:
-    container: 80
-    external: 3000
-  image:
-    name: romanowalex/simple-frontend
-    version: v1.0
+  service:
+    port:
+      container: 80
+      external: 3000
+    image:
+      name: romanowalex/simple-frontend
+      version: v1.0
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    probes:
+      liveness: /
+      readiness: /

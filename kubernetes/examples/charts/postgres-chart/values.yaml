@@ -1,15 +1,25 @@
 port: 5432
-
 image:
   name: postgres
   version: 13
 
-database:
-  default:
-    name: postgres
-    user: postgres
-    password: postgres
-  main:
-    name: simple_backend
-    user: program
+default_database:
+  name: postgres
+  user: postgres
+  password: postgres
+
+users:
+  - name: program
     password: test
+
+datases:
+  - name: simple_backend
+    user: program
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

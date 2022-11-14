@@ -1,12 +1,22 @@
+domain: romanow-alex.ru
 ingress:
   enabled: false
 
-port:
-  container:
-  external:
-
-enviroments: {}
-
-image:
-  name:
-  version:
+service:
+  port:
+    container:
+    external:
+  enviroments: { }
+  image:
+    name:
+    version:
+  resources:
+    requests:
+      cpu:
+      memory:
+    limits:
+      cpu:
+      memory:
+  probes:
+    liveness:
+    readiness:

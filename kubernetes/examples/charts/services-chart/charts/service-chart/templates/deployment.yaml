@@ -1,29 +1,58 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Chart.Name }}-deployment
+  name: {{ .Chart.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple-services
+    app.kubernetes.io/managed-by: helm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Chart.Name }}
-      app.kubernetes.io/version: "{{ .Chart.Version }}"
+      app: {{ .Chart.Name }}
   template:
     metadata:
       labels:
+        app: {{ .Chart.Name }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         app.kubernetes.io/version: "{{ .Chart.Version }}"
+        app.kubernetes.io/component: application
+        app.kubernetes.io/part-of: simple-services
+        app.kubernetes.io/managed-by: helm
     spec:
       containers:
         - name: {{ .Chart.Name }}
           imagePullPolicy: Always
-          image: {{ .Values.image.name }}:{{ .Values.image.version }}
+          image: {{ .Values.service.image.name }}:{{ .Values.service.image.version }}
+          resources:
+            requests:
+              memory: "{{ .Values.service.resources.requests.memory }}"
+              cpu: "{{ .Values.service.resources.requests.cpu }}"
+            limits:
+              memory: "{{ .Values.service.resources.limits.memory }}"
+              cpu: "{{ .Values.service.resources.limits.cpu }}"
+          livenessProbe:
+            initialDelaySeconds: 30
+            failureThreshold: 10
+            periodSeconds: 10
+            httpGet:
+              path: {{ .Values.service.probes.liveness }}
+              port: {{ .Values.service.port.container }}
+          readinessProbe:
+            initialDelaySeconds: 30
+            failureThreshold: 10
+            periodSeconds: 10
+            httpGet:
+              path: {{ .Values.service.probes.readiness }}
+              port: {{ .Values.service.port.container }}
           env:
-            {{- range $key, $value := .Values.enviroments }}
+            {{- range $key, $value := .Values.service.enviroments }}
             - name: {{ $key }}
               value: {{ $value | quote }}
-            {{- end }}
+          {{- end }}
           ports:
-            - name: web
-              containerPort: {{ .Values.port.container }}
+            - containerPort: {{ .Values.service.port.container }}
               protocol: TCP

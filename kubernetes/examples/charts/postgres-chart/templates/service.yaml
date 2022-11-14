@@ -4,12 +4,14 @@ metadata:
   name: {{ .Chart.Name }}
   labels:
     app.kubernetes.io/name: {{ .Chart.Name }}-service
+    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: simple-services
+    app.kubernetes.io/managed-by: helm
 spec:
   selector:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app: {{ .Chart.Name }}
   ports:
-    - name: postgres
-      protocol: TCP
+    - protocol: TCP
       port: {{ .Values.port }}
       targetPort: {{ .Values.port }}

@@ -2,28 +2,44 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Chart.Name }}-deployment
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/version: "{{ .Chart.Version }}"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: simple-services
+    app.kubernetes.io/managed-by: helm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Chart.Name }}
-      app.kubernetes.io/version: "{{ .Chart.Version }}"
+      app: {{ .Chart.Name }}
   template:
     metadata:
       labels:
+        app: {{ .Chart.Name }}
         app.kubernetes.io/name: {{ .Chart.Name }}
         app.kubernetes.io/version: "{{ .Chart.Version }}"
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: simple-services
+        app.kubernetes.io/managed-by: helm
     spec:
       containers:
         - name: {{ .Chart.Name }}
           image: {{ .Values.image.name }}:{{ .Values.image.version }}
           env:
             - name: POSTGRES_USER
-              value: {{ .Values.database.default.user }}
+              value: {{ .Values.default_database.user }}
             - name: POSTGRES_PASSWORD
-              value: "{{ .Values.database.default.password }}"
+              value: "{{ .Values.default_database.password }}"
             - name: POSTGRES_DB
-              value: {{ .Values.database.default.name }}
+              value: {{ .Values.default_database.name }}
+          resources:
+            requests:
+              memory: "{{ .Values.resources.requests.memory }}"
+              cpu: "{{ .Values.resources.requests.cpu }}"
+            limits:
+              memory: "{{ .Values.resources.limits.memory }}"
+              cpu: "{{ .Values.resources.limits.cpu }}"
           ports:
             - name: postgres
               containerPort: {{ .Values.port }}

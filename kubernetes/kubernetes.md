@@ -203,116 +203,15 @@ INFO Kubernetes file "k8s/simple-frontend-deployment.yaml" created
 [terragrunt](https://terragrunt.gruntwork.io/.
 
 ```shell
-$ git clone https://github.com/Romanow/ansible-kubernetes.git
-
-$ cd ansible-kubernetes/terraform/terragrunt
-
-# используем terraform (tfenv) и terragrunt (tgenv)
-$ tgenv install
-Terragrunt v0.35.10 is already installed
-
-$ tfenv install 1.0.11
-Terraform v1.0.11 is already installed
+$ git clone https://github.com/Romanow/terraform-do-k8s.git
 
 # получаем DigitalOcean Token (https://docs.digitalocean.com/reference/api/create-personal-access-token/)
-# создается k8s кластер из 3х нод 2CPU, 2Gb памяти в региона AMS, настраивается ingress (создается LoadBalancer)
+# создается k8s кластер из 3х нод 4CPU, 8Gb памяти в региона AMS, настраивается ingress (создается LoadBalancer)
 # и создаются DNS записи в домене romanow-alex.ru
-$ terragrunt apply
- 
-var.do_token
-  Enter a value: <token>
-
-Terraform used the selected providers to generate the following execution
-plan. Resource actions are indicated with the following symbols:
-  + create
- <= read (data resources)
-
-Terraform will perform the following actions:
-
-  # digitalocean_kubernetes_cluster.cluster will be created
-  + resource "digitalocean_kubernetes_cluster" "cluster" {
-      + cluster_subnet = (known after apply)
-      + created_at     = (known after apply)
-      + endpoint       = (known after apply)
-      + id             = (known after apply)
-      + ipv4_address   = (known after apply)
-      + kube_config    = (sensitive value)
-      + name           = "terragrunt-cluster"
-      + region         = "ams3"
-      + service_subnet = (known after apply)
-      + status         = (known after apply)
-      + surge_upgrade  = true
-      + updated_at     = (known after apply)
-      + version        = "1.20.11-do.0"
-      + vpc_uuid       = (known after apply)
-
-      + node_pool {
-          + actual_node_count = (known after apply)
-          + auto_scale        = false
-          + id                = (known after apply)
-          + name              = "worker-pool"
-          + node_count        = 3
-          + nodes             = (known after apply)
-          + size              = "s-2vcpu-4gb"
-          + tags              = [
-              + "k8s-cluster",
-            ]
-        }
-    }
-
-  # module.nginx-ingress[0].data.kubernetes_service.nginx-ingress will be read during apply
-  # (config refers to values not yet known)
- <= data "kubernetes_service" "nginx-ingress"  {
-      + id     = (known after apply)
-      + spec   = (known after apply)
-      + status = (known after apply)
-
-      + metadata {
-          + generation       = (known after apply)
-          + name             = "nginx-stable-nginx-ingress"
-          + namespace        = "nginx-ingress"
-          + resource_version = (known after apply)
-          + uid              = (known after apply)
-        }
-    }
-
-  # module.nginx-ingress[0].helm_release.ingress will be created
-  + resource "helm_release" "ingress" {
-      + atomic                     = false
-      + chart                      = "nginx-ingress"
-      + cleanup_on_fail            = false
-      + create_namespace           = true
-      + id                         = (known after apply)
-      + manifest                   = (known after apply)
-      + metadata                   = (known after apply)
-      + name                       = "nginx-stable"
-      + namespace                  = "nginx-ingress"
-      + repository                 = "https://helm.nginx.com/stable"
-
-      + set {
-          + name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/do-loadbalancer-certificate-id"
-          + value = "d67eda2a-c1d2-4c7e-9381-48ee6be9454a"
-        }
-      + set {
-          + name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/do-loadbalancer-name"
-          + value = "loadbalancer"
-        }
-      + set {
-          + name  = "controller.service.httpsPort.targetPort"
-          + value = "80"
-        }
-    }
-
-Plan: 10 to add, 0 to change, 0 to destroy.
-
-Do you want to perform these actions?
-  Terraform will perform the actions described above.
-  Only 'yes' will be accepted to approve.
-Enter a value: yes 
+$ cd dev/kubernetes
+$ terragrunt apply -auto-approve
 
 $ doctl kubernetes cluster kubeconfig save terragrunt-cluster
-Notice: Adding cluster credentials to kubeconfig file found in "/Users/aromanov/.kube/config"
-Notice: Setting current-context to do-ams3-terragrunt-cluster
 ```
 
 Деплой приложения в кластер.
@@ -374,55 +273,77 @@ simple-frontend   LoadBalancer   10.245.138.82    simple-frontend.romanow-alex.r
 ### Установка с помощью Helm
 
 ```shell
-$ cd examples/helm
+# create local cluster
+$ kind create cluster --config kind.yml
+
+# configure ingress
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
 # устанавливаем postgres
 $ helm install postgres postgres-chart/
-NAME: postgres
-LAST DEPLOYED: Wed Dec 15 12:33:33 2021
-NAMESPACE: default
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
 
 # обновление postgres
 $ helm upgrade \
   --set image.version=14 \
-  --description 'Increment version' \
+  --description 'Update to Postgres 14' \
   postgres postgres-chart/
-  
-Release "postgres" has been upgraded. Happy Helming!
-NAME: postgres
-LAST DEPLOYED: Wed Dec 15 12:57:32 2021
-NAMESPACE: default
-STATUS: deployed
-REVISION: 2
-TEST SUITE: None
 
 # получение истории изменений postgres
 $ helm history postgres
 REVISION	UPDATED                 	STATUS  	CHART         	APP VERSION	DESCRIPTION     
 1       	Wed Dec 15 12:33:33 2021	superseded	postgres-1.0.0	           	Install complete
-2       	Wed Dec 15 12:57:32 2021	deployed  	postgres-1.0.0	           	Increment version
+2       	Wed Dec 15 12:57:32 2021	deployed  	postgres-1.0.0	           	Update to Postgres 14
 
 # тестовый запуск services (frontend + backend), без применения изменений на кластере
-$ helm install services services-chart/ --debug --dry-run
+$ helm install services services-chart/ \
+    --set simple-frontend.domain=local\
+    --debug \
+    --dry-run
 
-# вывод манифестов для отладки шаблонов
-$ helm template services services-chart/ --debug
+$ echo "127.0.0.1    simple-frontend.local" | sudo tee -a /etc/hosts > /dev/null
 
-# деплоим frontend и backend в кластер
-$ helm install services services-chart/
-NAME: services
-LAST DEPLOYED: Wed Dec 15 13:00:01 2021
-NAMESPACE: default
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
+# запускаем frontend и backend в кластер
+$ helm install services services-chart/ --set simple-frontend.domain=local
+
+# открыть в браузере http://simple-frontend.local
 
 # удаление services
-$ helm uninstall services
-release "services" uninstalled
+$ helm uninstall services postgres
+```
+
+```shell
+$ git clone git@github.com:Romanow/micro-services-v2.git
+$ cd k8s
+
+$ helm install postgres postgres-chart/
+$ helm install services services-chart/
+$ helm install elasticsearch elasticsearch-chart/
+$ helm install monitoring monitoring-chart/
+$ helm install logging logging-chart/
+$ helm install logging logging-chart/
+
+$ helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
+$ helm search repo jaegertracing
+NAME                            CHART VERSION   APP VERSION     DESCRIPTION
+jaegertracing/jaeger            0.64.1          1.37.0          A Jaeger Helm chart for Kubernetes
+jaegertracing/jaeger-operator   2.37.0          1.39.0          jaeger-operator Helm chart for Kubernetes
+
+# устанавливаем репозиторий с cert manager
+$ helm repo add jetstack https://charts.jetstack.io  
+$ helm repo update
+
+# устанавливаем cert manager CRD
+$ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.0/cert-manager.crds.yaml
+
+# устанавливаем cert manager
+$ helm install \                                                                                         master 
+      cert-manager jetstack/cert-manager \
+      --namespace cert-manager \
+      --create-namespace \
+      --version v1.10.0
+
+# устанавливаем Jaeger Operator
+$ helm install jaeger-operator jaegertracing/jaeger-operator
 ```
 
 ## Литература
