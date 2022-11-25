@@ -185,6 +185,186 @@ eth0, внутри пода тоже есть eth0, на host-машине он�
 
 ![Overlay network](images/kubernetes/overlay_network.png)
 
+### RBAC (Role Based Account Control)
+
+RBAC (Role-based access control) — это система распределения прав доступа к различным объектам в кластере Kubernetes.
+Объекты в кластере Kubernetes — это YAML-манифесты, а права доступа определяют, какому пользователю можно только
+просматривать манифесты, а кто может их создавать, изменять или даже удалять.
+
+##### ServiceAccount
+
+ServiceAccount используется для ограничения прав ПО, которое работает в кластере. Всё общение между компонентами
+кластера идёт через запросы к API-серверу, и каждый такой запрос как раз авторизуется специальным JWT-токеном. Этот
+токен генерируется при создании объекта типа ServiceAccount и кладётся в secret.
+
+В отличие от обычного пользователя, которому мы можем задать произвольный пароль, JWT-токен содержит внутри себя
+служебную информацию с названием ServiceAccount, Namespace и подписан корневым сертификатом кластера.
+
+Свой сервис аккаунт default есть в каждом namespace, он создаётся автоматически. По умолчанию прав у этого аккаунта на
+доступ к API нет никаких.
+
+```shell
+$ kubectl describe pod \
+    -l app.kubernetes.io/name=ingress-nginx 
+    -l app.kubernetes.io/component=controller \
+    -n ingress-nginx
+
+Name:         ingress-nginx-controller-6bccc5966-l6rc5
+Namespace:    ingress-nginx
+    
+Containers:
+  controller:
+    ...
+    Mounts:
+      /usr/local/certificates/ from webhook-cert (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-bm92n (ro)
+
+# берем токен и расшифровываем в jwt.io
+$ kubectl exec -it ingress-nginx-controller-6bccc5966-l6rc5 -n ingress-nginx -- cat /var/run/secrets/kubernetes.io/serviceaccount/token 
+{
+  "aud": [
+    "https://kubernetes.default.svc.cluster.local"
+  ],
+  "exp": 1700933304,
+  "iat": 1669397304,
+  "iss": "https://kubernetes.default.svc.cluster.local",
+  "kubernetes.io": {
+    "namespace": "ingress-nginx",
+    "pod": {
+      "name": "ingress-nginx-controller-6bccc5966-l6rc5",
+      "uid": "9aa52828-04c4-489d-91ab-cd02f5685c75"
+    },
+    "serviceaccount": {
+      "name": "ingress-nginx",
+      "uid": "a07e7ab7-b249-443d-9309-2e3d7b3a47a5"
+    },
+    "warnafter": 1669400911
+  },
+  "nbf": 1669397304,
+  "sub": "system:serviceaccount:ingress-nginx:ingress-nginx"
+}
+```
+
+#### Role
+
+Role — это YAML-манифест, который описывает некий набор прав на объекты кластера Kubernetes.
+
+```shell
+$ kubectl get role -n ingress-nginx ingress-nginx -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+rules:
+- apiGroups: [ "" ]
+  resources: [ "namespaces" ]
+  verbs:
+  - get
+- apiGroups: [ "networking.k8s.io" ]
+  resources: [ "ingresses" ]
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups: [ "networking.k8s.io" ]
+  resources: [ "ingresses/status" ]
+  verbs:
+  - update
+
+$ kubectl describe role -n ingress-nginx ingress-nginx
+Name:         ingress-nginx
+PolicyRule:
+  Resources                           Non-Resource URLs  Resource Names          Verbs
+  ---------                           -----------------  --------------          -----
+  events                              []                 []                      [create patch]
+  leases.coordination.k8s.io          []                 []                      [create]
+  configmaps                          []                 []                      [get list watch create]
+  endpoints                           []                 []                      [get list watch]
+  pods                                []                 []                      [get list watch]
+  secrets                             []                 []                      [get list watch]
+  services                            []                 []                      [get list watch]
+  ingressclasses.networking.k8s.io    []                 []                      [get list watch]
+  ingresses.networking.k8s.io         []                 []                      [get list watch]
+  configmaps                          []                 [ingress-nginx-leader]  [get update]
+  leases.coordination.k8s.io          []                 [ingress-nginx-leader]  [get update]
+  namespaces                          []                 []                      [get]
+  endpointslices.discovery.k8s.io     []                 []                      [list watch get]
+  ingresses.networking.k8s.io/status  []                 []                      [update]
+```
+
+* `apiGroups` — описывает API-группу манифеста. Это то, что написано в поле apiVersion: до `/`. Если в `apiVersion`
+  указана только версия, без группы, например, как в манифесте Pod, то считается, что у этого манифеста так называемая
+  корневая группа (core-group); в роли корневой группы указывается как пустая строка "".
+* `resourсes` — список ресурсов, к которым описывается доступ, во множественном числе. Посмотреть список ресурсов в
+  кластере можно командой `kubectl api-resources`. Также есть подресурсы, описывающие специфические действия, например,
+  подресурс `pods/log` разрешает просматривать логи контейнеров в поде.
+* `verbs` — список действий, которые можно сделать с ресурсами, описанными выше: получить, посмотреть список, следить за
+  изменением, отредактировать, удалить и т.п. Verbs описывают HTTP REST (GET, PUT, POST, DELETE) или, если более сложное
+  действие (`watch`, `escalate`), то кодируется в URL.
+
+Role описывает права в namespace. ClusterRole — это кластерный объект, сущность описывает права на объекты во всём
+кластере.
+
+#### RoleBinding, ClusterRoleBinding
+
+С помощью механизма RoleBinding мы связываем Role и ServiceAccount. `roleRef` ссылается на роль, а `subjects` указывает
+к какому ServiceAccount она принадлежит.
+
+```shell
+$ kubectl get rolebinding ingress-nginx -n ingress-nginx -o yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-nginx
+subjects:
+- kind: ServiceAccount
+  name: ingress-nginx
+  namespace: ingress-nginx
+```
+
+RoleBinding даёт доступ только к тем сущностям, которые находятся в том же namespace, что и манифест RoleBinding.
+ClusterRoleBinding позволяет выдать доступ к сущностям во всех namespace кластера сразу.
+
+### Kubernetes Operator
+
+#### CRD (Custom Resource Definition)
+
+Ресурс — это endpoint в Kubernetes API, в котором хранится набор объектов API определенного Kind; например, встроенный
+ресурс `pods` содержит коллекцию объектов Pod.
+
+Custom Resource — это расширение API Kubernetes, которое не обязательно доступно по умолчанию и представляет собой
+надстройку над Kubernetes. Custom Resources могут создаваться и удаляться в работающем кластере посредством динамической
+регистрации, а администраторы могут обновлять пользовательские ресурсы независимо от самого кластера. После установки
+пользовательского ресурса пользователи могут создавать и получить доступ к своим объектам с помощью `kubectl`, как и к
+встроенным ресурсам, таким как Pods.
+
+#### Operators
+
+_Оператор_ – это человек, который управляет какой-то сложной системой.
+
+В Kubernetes Operator — это программное расширение, которое использует декларативные CustomResource для управления
+приложениями и их составными частями. Другими словами, операторы – это потребители Kubernetes API, которые действуют как
+контроллеры для CustomResource.
+
+Операторы подключаются к Kubernetes API и следят за соответствующими событиями. Они действуют как настраиваемые
+контроллеры Kubernetes, вводя в кластер собственные типы объектов, которые получают информацию об обновлении
+отслеживаемых объектов и выполняют изменения в подчиненных ресурсах.
+
+Требуемое состояние описывается пользователем в YAML, создающим объекты Kubernetes в качестве пользовательского ресурса.
+Оператор выполняет свой цикл всякий раз, когда такие объекты появляются, обновляются или удаляются. Операторы работают
+как Pods в кластере.
+
+Другими словами, операторы декларативно получают настройки и выполняют сложную настройку ресурсов на основе внутренней
+логики. Например, оператор, ответственный за деплой Postgres в кластер Kubernetes, может на основе параметров развернуть
+БД как один Pod или создать несколько Pod и настроить Master-Slave репликацию. За счет того, что движок оператора
+является контроллером, т.е. по сути приложением, он может делать более сложные вещи, чем просто манифесты helm чартов.
+
 ## Пример
 
 Есть возможность конвертировать существующие Docker Compose файлы в манифесты k8s.
@@ -311,42 +491,9 @@ $ helm install services services-chart/ --set simple-frontend.domain=local
 $ helm uninstall services postgres
 ```
 
-```shell
-$ git clone git@github.com:Romanow/micro-services-v2.git
-$ cd k8s
-
-$ helm install postgres postgres-chart/
-$ helm install services services-chart/
-$ helm install elasticsearch elasticsearch-chart/
-$ helm install monitoring monitoring-chart/
-$ helm install logging logging-chart/
-$ helm install logging logging-chart/
-
-$ helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
-$ helm search repo jaegertracing
-NAME                            CHART VERSION   APP VERSION     DESCRIPTION
-jaegertracing/jaeger            0.64.1          1.37.0          A Jaeger Helm chart for Kubernetes
-jaegertracing/jaeger-operator   2.37.0          1.39.0          jaeger-operator Helm chart for Kubernetes
-
-# устанавливаем репозиторий с cert manager
-$ helm repo add jetstack https://charts.jetstack.io  
-$ helm repo update
-
-# устанавливаем cert manager CRD
-$ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.10.0/cert-manager.crds.yaml
-
-# устанавливаем cert manager
-$ helm install \                                                                                         master 
-      cert-manager jetstack/cert-manager \
-      --namespace cert-manager \
-      --create-namespace \
-      --version v1.10.0
-
-# устанавливаем Jaeger Operator
-$ helm install jaeger-operator jaegertracing/jaeger-operator
-```
-
 ## Литература
 
-2. [Helm](https://helm.sh/docs/)
-1. [Kompose User Guide](https://kompose.io/user-guide/)
+1. [Собственный Kubernetes оператор за час](https://www.youtube.com/watch?v=tFzM-2pwL8A)
+2. [Продвинутые абстракции Kubernetes: Job, CronJob, RBAC](https://www.youtube.com/watch?v=fUBpMbHsfL4)
+3. [Сеть Kubernetes, отказоустойчивый setup кластера](https://www.youtube.com/watch?v=JNUD9j9QAnA)
+4. [Helm. Темплейтирование приложений Kubernetes](https://www.youtube.com/watch?v=me6-_gmfFPo)

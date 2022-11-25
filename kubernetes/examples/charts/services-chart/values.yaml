@@ -7,7 +7,7 @@ simple-backend:
       name: romanowalex/simple-backend
       version: v1.0
     enviroments:
-      SPRING_PROFILES_ACTIVE: docker
+      SPRING_PROFILES_ACTIVE: k8s
     resources:
       requests:
         cpu: 500m
