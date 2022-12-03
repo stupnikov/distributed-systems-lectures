@@ -1,18 +1,21 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: simple-frontend
+  name: simple-frontend-loadbalancer
   annotations:
     service.beta.kubernetes.io/do-loadbalancer-name: "loadbalancer"
     service.beta.kubernetes.io/do-loadbalancer-certificate-id: "d67eda2a-c1d2-4c7e-9381-48ee6be9454a"
     service.beta.kubernetes.io/do-loadbalancer-hostname: "simple-frontend.romanow-alex.ru"
   labels:
     app.kubernetes.io/name: simple-frontend-loadbalancer
+    app.kubernetes.io/version: "v1.0"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple
+    app.kubernetes.io/managed-by: helm
 spec:
   type: LoadBalancer
   selector:
-    app.kubernetes.io/name: simple-frontend
-    app.kubernetes.io/version: "v1.0"
+    app: simple-frontend
   ports:
     - name: frontend
       protocol: TCP

@@ -1,49 +1,65 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres
+  name: postgres-service
   labels:
     app.kubernetes.io/name: postgres-service
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: simple-backend
+    app.kubernetes.io/managed-by: helm
 spec:
   selector:
-    app.kubernetes.io/name: postgres
-    app.kubernetes.io/version: "13"
+    app: postgres
   ports:
-    - name: postgres
-      protocol: TCP
+    - protocol: TCP
       port: 5432
       targetPort: 5432
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: postgres-config
+  name: postgres-configmap
+  labels:
+    app.kubernetes.io/name: postgres-configmap
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple
+    app.kubernetes.io/managed-by: helm
 data:
-  create-user-and-db.sql: |
+  10-create-user-and-dbs.sql: |
+    CREATE USER program WITH PASSWORD 'test';
     CREATE DATABASE simple_backend;
-    CREATE ROLE program WITH PASSWORD 'test';
     GRANT ALL PRIVILEGES ON DATABASE simple_backend TO program;
-    ALTER ROLE program WITH LOGIN;
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/version: "13"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: simple
+    app.kubernetes.io/managed-by: helm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: postgres
-      app.kubernetes.io/version: "13"
+      app: postgres
   template:
     metadata:
       labels:
+        app: postgres
         app.kubernetes.io/name: postgres
         app.kubernetes.io/version: "13"
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: simple
+        app.kubernetes.io/managed-by: helm
     spec:
       containers:
         - name: postgres
-          image: postgres:13
+          image: "postgres:13"
           env:
             - name: POSTGRES_USER
               value: postgres
@@ -51,6 +67,13 @@ spec:
               value: "postgres"
             - name: POSTGRES_DB
               value: postgres
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
           ports:
             - name: postgres
               containerPort: 5432
@@ -63,4 +86,4 @@ spec:
         - name: db-data
         - name: postgres-config-map
           configMap:
-            name: postgres-config
+            name: postgres-configmap

@@ -298,47 +298,6 @@ Circuit Breaker использует механизм скользящего о�
 
 ![High Availability GEO DNS](images/high_availability_geo_dns.png)
 
-## Примеры
-
-Для работы примера нужен OpenJDK 11 и Docker. Для Docker нужно выдать 4 CPU, 8Gb памяти, т.к. поднимается 10
-контейнеров.
-
-```shell
-$ git clone --single-branch --branch circuit-breaker https://github.com/Romanow/micro-services-v2.git
-$ cd micro-services-v2
-# собираем проект 
-$ ./gradlew clean build
-# пакуем в Docker
-$ docker compose build
-# запускаем
-$ docker compose up
-# дождаться поднятия всех контейнеров
-$ docker ps
-CONTAINER ID   IMAGE          COMMAND                  CREATED         STATUS          PORTS                                                                                                                                                                                                      NAMES
-9d43bcf7ca90   e9d16c70967f   "java -Dserver.port=…"   8 minutes ago   Up 8 minutes    0.0.0.0:8280->8280/tcp, :::8280->8280/tcp                                                                                                                                                                  warehouse
-827a8c8bbcc2   c1a96c337def   "java -Dserver.port=…"   8 minutes ago   Up 8 minutes    0.0.0.0:8480->8480/tcp, :::8480->8480/tcp                                                                                                                                                                  store
-7b0840850d99   f694d420b63a   "java -Dserver.port=…"   8 minutes ago   Up 11 seconds   0.0.0.0:8180->8180/tcp, :::8180->8180/tcp                                                                                                                                                                  warranty
-a0db9bbc0af5   0842115c5320   "java -Dserver.port=…"   8 minutes ago   Up 8 minutes    0.0.0.0:8380->8380/tcp, :::8380->8380/tcp                                                                                                                                                                  order
-79788f682e62   7975f8e74a95   "docker-entrypoint.s…"   8 minutes ago   Up 8 minutes    0.0.0.0:5432->5432/tcp, :::5432->5432/tcp                                                                                                                                                                  postgres
-a83d0ee9da01   ddfae340d068   "/run.sh"                8 minutes ago   Up 8 minutes    0.0.0.0:3000->3000/tcp, :::3000->3000/tcp                                                                                                                                                                  grafana
-93d9f85bc89d   c10e9cbf22cd   "/bin/prometheus --c…"   8 minutes ago   Up 8 minutes    0.0.0.0:9090->9090/tcp, :::9090->9090/tcp                                                                                                                                                                  prometheus
-91dc0bc0aaf6   fe4f5979a057   "docker-entrypoint.s…"   8 minutes ago   Up 8 minutes    8300-8302/tcp, 8500/tcp, 8301-8302/udp, 8600/tcp, 8600/udp                                                                                                                                                 consul-server-1
-faf9ac3f5829   fe4f5979a057   "docker-entrypoint.s…"   8 minutes ago   Up 8 minutes    8300-8302/tcp, 8500/tcp, 8301-8302/udp, 8600/tcp, 8600/udp                                                                                                                                                 consul-server-2
-12d3e76297dc   fe4f5979a057   "docker-entrypoint.s…"   8 minutes ago   Up 8 minutes    0.0.0.0:8400->8400/tcp, :::8400->8400/tcp, 0.0.0.0:8500->8500/tcp, :::8500->8500/tcp, 8300-8302/tcp, 8301-8302/udp, 0.0.0.0:8600->8600/tcp, :::8600->8600/tcp, 0.0.0.0:8600->8600/udp, :::8600->8600/udp   consul-server-bootstrap
-52972bf7ad14   207a0c80cae0   "/opt/jboss/tools/do…"   45 hours ago    Up 45 hours     8443/tcp, 0.0.0.0:8090->8080/tcp, :::8090->8080/tcp
-  
-# открываем Consul http://localhost:8500 и видим 4 сервиса:
-# * store-service
-# * order-service
-# * warehouse-service
-# * warranty-service
-# открываем Grafana http://localhost:3000 (admin:admin). Для просмотра доступно два dashboard (Dashboards -> Manage):
-# * Spring Boot 2.1 Statistics – состояние приложений на Java Spring
-# * Resilience4j – состояние circuit breaker
-```
-
-[MicroServices](https://github.com/Romanow/micro-services-v2)
-
 ## Литература
 
 1. [Service Discovery в распределенных системах на примере Consul](https://habr.com/ru/post/487706/)

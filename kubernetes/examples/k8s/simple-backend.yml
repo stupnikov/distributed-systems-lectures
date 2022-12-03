@@ -3,40 +3,76 @@ kind: Service
 metadata:
   name: simple-backend
   labels:
-    app.kubernetes.io/name: simple-backend-service
-spec:
-  selector:
     app.kubernetes.io/name: simple-backend
     app.kubernetes.io/version: "v1.0"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple
+    app.kubernetes.io/managed-by: helm
+spec:
+  selector:
+    app: service
   ports:
-    - name: backend
-      protocol: TCP
+    - protocol: TCP
       port: 8080
       targetPort: 8080
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: simple-backend
+  name: service
+  labels:
+    app.kubernetes.io/name: simple-backend
+    app.kubernetes.io/version: "v1.0"
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: simple
+    app.kubernetes.io/managed-by: helm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: simple-backend
-      app.kubernetes.io/version: "v1.0"
+      app: service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/backend/manage/prometheus"
+        prometheus.io/port: "8080"
       labels:
+        app: service
         app.kubernetes.io/name: simple-backend
         app.kubernetes.io/version: "v1.0"
+        app.kubernetes.io/component: application
+        app.kubernetes.io/part-of: simple
+        app.kubernetes.io/managed-by: helm
     spec:
       containers:
         - name: simple-backend
+          imagePullPolicy: Always
           image: romanowalex/simple-backend:v1.0
-          ports:
-            - name: backend
-              containerPort: 8080
-              protocol: TCP
+          resources:
+            requests:
+              memory: "1024Mi"
+              cpu: "500m"
+            limits:
+              memory: "1024Mi"
+              cpu: "500m"
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: docker
+              value: "k8s"
+          livenessProbe:
+            initialDelaySeconds: 60
+            failureThreshold: 10
+            periodSeconds: 10
+            httpGet:
+              path: /backend/manage/health/liveness
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 60
+            failureThreshold: 10
+            periodSeconds: 10
+            httpGet:
+              path: /backend/manage/health/readiness
+              port: 8080
+          ports:
+            - name: web
+              containerPort: 8080

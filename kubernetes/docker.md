@@ -455,7 +455,7 @@ rtt min/avg/max/mdev = 11.478/11.802/12.126/0.324 ms
 размеров образов, его составляющих.
 
 ```shell
-$ docker history store-service:v1.0
+$ docker history simple-backend:v1.0
 IMAGE          CREATED       CREATED BY                                      SIZE      COMMENT
 c1a96c337def   5 days ago    ENTRYPOINT ["java" "-Dserver.port=${PORT:-84…   0B        buildkit.dockerfile.v0
 <missing>      5 days ago    COPY application/application/ ./ # buildkit     179kB     buildkit.dockerfile.v0
@@ -594,7 +594,7 @@ $ docker run -d \
       --name simple-backend \
       --network postgres-network \
       -e SPRING_PROFILES_ACTIVE=docker \
-      romanowalex/store-service:v1.0
+      romanowalex/simple-backend:v1.0
 
 $ docker inspect -f "{{json .NetworkSettings.Networks }}" simple-backend | jq
 {

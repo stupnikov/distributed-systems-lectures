@@ -459,7 +459,11 @@ $ kind create cluster --config kind.yml
 # configure ingress
 $ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
+# скачиваем Simple Backend
+$ git clone git@github.com:Romanow/simple-backend.git
+
 # устанавливаем postgres
+$ cd simple-backend/k8s
 $ helm install postgres postgres-chart/
 
 # обновление postgres
@@ -474,21 +478,23 @@ REVISION	UPDATED                 	STATUS  	CHART         	APP VERSION	DESCRIPTIO
 1       	Wed Dec 15 12:33:33 2021	superseded	postgres-1.0.0	           	Install complete
 2       	Wed Dec 15 12:57:32 2021	deployed  	postgres-1.0.0	           	Update to Postgres 14
 
-# тестовый запуск services (frontend + backend), без применения изменений на кластере
-$ helm install services services-chart/ \
-    --set simple-frontend.domain=local\
-    --debug \
-    --dry-run
+# тестовый запуск Simple Backend без применения изменений на кластере
+$ helm install simple-backend service-chart/ --debug --dry-run
 
+# устанавливаем Simple Backend
+$ helm install simple-backend service-chart/
+
+# скачиваем Simple Frontend
+$ git clone git@github.com:Romanow/simple-frontend.git
 $ echo "127.0.0.1    simple-frontend.local" | sudo tee -a /etc/hosts > /dev/null
 
-# запускаем frontend и backend в кластер
-$ helm install services services-chart/ --set simple-frontend.domain=local
+# устанавливаем Simple Frontend
+$ helm install simple-frontend frontend-chart/ --set domain=simple-frontend.local
 
 # открыть в браузере http://simple-frontend.local
 
 # удаление services
-$ helm uninstall services postgres
+$ helm uninstall simple-backend simple-frontend postgres
 ```
 
 ## Литература
