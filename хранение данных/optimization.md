@@ -1,5 +1,7 @@
 # Индексы и оптимизация SQL запросов
 
+
+
 ## Литература
 
 1. [PostgreSQL Antipatterns: сражаемся с ордами "мертвецов"](https://habr.com/ru/company/tensor/blog/491366/)

@@ -1,0 +1,18 @@
+version: "3"
+services:
+  postgres:
+    image: library/postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres/:/docker-entrypoint-initdb.d/
+      - ./data/:/opt/data/
+    ports:
+      - "5432:5432"
+
+volumes:
+  db-data:
