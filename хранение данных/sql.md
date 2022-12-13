@@ -6,19 +6,18 @@
 * [x] `LATERAL JOIN`: вывод первых 3 студентов в каждом курсе.
 * [x] `SELECT DISTINC ...`, `SELECT COUNT(DISTINCT ...)`: подсчет различных записей.
 * [x] `LIMIT ... OFFSET ...`, пагинация по всем студентам, `LIMIT, ORDER BY ID, ID > ...`, пагинация по ID.
-* [ ] `RECURSIVE`
+* [x] `RECURSIVE`
     * вычисление факториала;
     * планета, континенты, страны.
-* [ ] `INLINE VIEW`: группа и курс, упорядоченная по имени и фамилии.
+* [x] `INLINE VIEW`: группа и курс, упорядоченная по имени и фамилии.
 * [ ] `OVER ... PARTITION BY ...`: #TODO
 * [ ] `FILTER (WHERE ...)`: фильтрация результата.
 * [ ] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
 * [ ] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
   таблицы в другую таблицу.
 * [ ] `INSERT ... ON CONFLICT DO UPDATE / NOTHING`: upsert.
-* [ ] `INSERT ... RETURNING id`: возвращение id только что созданной записи.
+* [x] `INSERT ... RETURNING id`: возвращение id только что созданной записи.
 * [ ] `REFERENCES ... ON DELETE ...`: cascade обновления / удаления.
-* [ ] `CREATE OR REPLACE FUNCTION ...`, `CREATE TRIGGER ...`: сохранение старой записи.
 * [ ] `JSON`
 
 ### Пример
@@ -36,6 +35,14 @@ DROP TABLE IF EXISTS courses;
 * `CHECK` – проверка значения поля при вставке значения.
 * `SERIAL` == `INT` + sequence.
 * `PRIMARY KEY` – на primary key всегда создается unique index.
+* `ON DELETE / ON UPDATE` – действие выполняемое при удалении / обновлении записи на которую ссылается Foreign Key:
+    * `SET NULL / DEFAULT` – в поле устанавливается `NULL` или значение по-умолчанию.
+    * `CASCADE` – удаляет строки из зависимой таблицы при удалении или изменении связанных строк в главной таблице.
+    * `RESTRICT` – предотвращает какие-либо действия в зависимой таблице при удалении или изменении связанных строк в
+      главной таблице.
+    * `NO ACTION` – (действие по умолчанию) предотвращает какие-либо действия в зависимой таблице при удалении или
+      изменении связанных строк в главной таблице и генерирует ошибку. (Главным отличием этих двух вариантов является
+      то, что `NO ACTION` позволяет отложить проверку в процессе транзакции, а `RESTRICT` — нет)
 
 ```postgresql
 CREATE TABLE students
@@ -61,9 +68,11 @@ CREATE TABLE course_grades
     grade      NUMERIC(8, 2)
         CHECK (grade BETWEEN 2 AND 5),
     course_id  INT
-        CONSTRAINT fk_course_grades_course_id REFERENCES courses (id),
+        CONSTRAINT fk_course_grades_course_id REFERENCES courses (id)
+            ON DELETE CASCADE,
     student_id INT
         CONSTRAINT fk_course_grades_student_id REFERENCES students (id)
+            ON DELETE SET NULL
 );
 
 CREATE INDEX idx_course_grades_grade ON course_grades (grade);
@@ -152,6 +161,14 @@ GROUP BY StudentName;
 
 ### LATERAL JOIN
 
+`LATERAL JOIN` – subquery appearing in `FROM` can be preceded by the key word LATERAL. This allows them to reference
+columns provided by preceding `FROM` items. (Without LATERAL, each subquery is evaluated independently and so cannot
+cross-reference any other `FROM` item.)
+
+A `LATERAL JOIN` is more like a correlated subquery, not a plain subquery, in that expressions to the right of
+a `LATERAL JOIN` are evaluated once for each row left of it – just like a correlated subquery – while a plain subquery (
+table expression) is evaluated once only.
+
 Найти какой предмет студент сдал лучше всего.
 
 ```postgresql
@@ -192,22 +209,134 @@ LIMIT 10;
 
 ### Inline View
 
+```postgresql
+WITH student_avg_grade AS (
+    SELECT s.firstname || ' ' || s.lastname AS student_name
+         , AVG(cg.grade)                    AS average_grade
+    FROM course_grades cg
+        INNER JOIN students s ON s.id = cg.student_id
+    GROUP BY student_name
+)
+SELECT *
+FROM student_avg_grade sag
+WHERE sag.average_grade > 4.2;
+```
+
+Удаление данных из основной таблицы в history. Метод возвращает список реально удаленных записей.
+
+`RETURNING *` – возвращает всю удаленную строку, `RETURNING id` – только id. Конструкция `RETURNING` применима
+для `INSERT`, `UPDATE`, `DELETE`.
+
+`CREATE TABLE ... (LIKE ...)` – создание таблицы на основе DDL другой таблицы.
+
+```postgresql
+CREATE TABLE students_history
+(
+    LIKE students
+);
+
+CREATE OR REPLACE FUNCTION delete_students(ids INT[])
+    RETURNS TABLE
+            (
+                STUDENT_ID INT
+            )
+AS
+$$
+BEGIN
+    RETURN QUERY
+        WITH deleted_rows AS (DELETE FROM students WHERE id = ANY (ids) RETURNING *)
+            INSERT INTO students_history (SELECT * FROM deleted_rows) RETURNING id;
+END;
+$$
+    LANGUAGE plpgsql;
+
+SELECT delete_students(ARRAY [1, 2, 3]);
+```
+
 ### Recursive View
 
 Рекурсивное вычисление факториала.
 
 ```postgresql
-WITH RECURSIVE t(n) AS (
-    SELECT 1
+WITH RECURSIVE fact (n, factorial) AS (
+    SELECT 1::NUMERIC
+         , 1::NUMERIC
 
     UNION ALL
 
-    SELECT o.a + 1
-    FROM one o
-    WHERE o.a < 100
+    SELECT n + 1         AS n
+         , factorial * n AS factorial
+    FROM fact
+    WHERE n < 20
 )
-SELECT SUM(n)
-FROM t;
+SELECT *
+FROM fact;
+```
+
+Вычисление чисел Фибоначчи:
+
+```postgresql
+WITH RECURSIVE fib(a, b) AS (
+    SELECT 0::NUMERIC
+         , 1::NUMERIC
+
+    UNION ALL
+
+    SELECT GREATEST(a, b), a + b AS a
+    FROM fib
+    WHERE a <= 100000
+)
+SELECT a
+FROM fib;
+```
+
+`WITH RECURSIVE` можно применять для обхода дерева:
+
+```postgresql
+DROP TABLE IF EXISTS geo;
+CREATE TABLE geo
+(
+    id        SERIAL PRIMARY KEY,
+    parent_id INT
+        CONSTRAINT fk_geo_parent_id REFERENCES geo (id),
+    name      VARCHAR(80)
+);
+```
+
+```postgresql
+INSERT INTO geo (id, parent_id, name)
+VALUES (1, NULL, 'Планета Земля')
+     , (2, 1, 'Евразия')
+     , (3, 1, 'Северная Америка')
+     , (4, 2, 'Европа')
+     , (5, 4, 'Россия')
+     , (6, 4, 'Германия')
+     , (7, 5, 'Москва')
+     , (8, 5, 'Санкт-Петербург')
+     , (9, 6, 'Берлин');
+```
+
+```postgresql
+WITH RECURSIVE recursive AS (
+    SELECT g.id        AS id
+         , g.parent_id AS Parent
+         , g.name      AS Name
+         , 1           AS Level
+    FROM geo g
+    WHERE g.id = 1
+
+    UNION ALL
+
+    SELECT g.id                AS id
+         , g.parent_id         AS Parent
+         , g.name              AS NAME
+         , recursive.Level + 1 AS LEVEL
+    FROM geo g
+        JOIN recursive
+             ON g.parent_id = recursive.id
+)
+SELECT *
+FROM recursive;
 ```
 
 #### Window function
@@ -231,35 +360,6 @@ WHERE cg.rn <= 3;
 ### OLD
 
 ```postgresql
---------------------------------
------- WITH (INLINE VIEW) ------
---------------------------------
-SELECT *
-FROM one o
-    JOIN (SELECT c, d FROM two t) k ON o.a = k.c;
-
-WITH k(c, d)
-         AS (SELECT c, d FROM two)
-SELECT *
-FROM one o
-    JOIN k ON o.a = k.c;
-
-CREATE TABLE one_hist
-(
-    LIKE one
-);
-WITH deleted_rows AS
-         (
-             DELETE FROM one RETURNING *
-         )
-INSERT
-INTO one_hist
-SELECT *
-FROM deleted_rows;
-
-INSERT INTO one
-SELECT *
-FROM one_hist;
 --------------------------------
 ------ MATERIALIZED VIEW -------
 --------------------------------
@@ -302,61 +402,6 @@ ORDER BY ot.m;
 SELECT *
 FROM one;
 --------------------------------
--------- WITH RECURSIVE --------
---------------------------------
-WITH RECURSIVE t(n) AS (
-    SELECT 1
-
-    UNION ALL
-
-    SELECT o.a + 1
-    FROM one o
-    WHERE o.a < 100
-)
-SELECT SUM(n)
-FROM t;
-
-CREATE TABLE geo
-(
-    id        INT NOT NULL PRIMARY KEY,
-    parent_id INT REFERENCES geo (id),
-    name      VARCHAR(1000)
-);
-
-INSERT INTO geo
-    (id, parent_id, name)
-VALUES (1, NULL, 'Планета Земля')
-     , (2, 1, 'Континент Евразия')
-     , (3, 1, 'Континент Северная Америка')
-     , (4, 2, 'Европа')
-     , (5, 4, 'Россия')
-     , (6, 4, 'Германия')
-     , (7, 5, 'Москва')
-     , (8, 5, 'Санкт-Петербург')
-     , (9, 6, 'Берлин');
-
-WITH RECURSIVE r AS (
-    SELECT id
-         , parent_id
-         , name
-         , 1 AS level
-    FROM geo
-    WHERE id = 1
-
-    UNION ALL
-
-    SELECT geo.id
-         , geo.parent_id
-         , geo.name
-         , r.level + 1 AS level
-    FROM geo
-        JOIN r
-             ON geo.parent_id = r.id
-)
-SELECT *
-FROM r;
-
---------------------------------
 ---- OVER ... PARTITION BY -----
 --------------------------------
 
@@ -398,12 +443,6 @@ ORDER BY r;
 --------------------------------
 SELECT SUM(o.a) FILTER (WHERE a > 50), SUM(o.a)
 FROM one o;
-
-INSERT INTO one (SELECT * FROM one_hist);
-CREATE TABLE one_hist
-(
-    LIKE one
-);
 ```
 
 ### Данные для примеров
