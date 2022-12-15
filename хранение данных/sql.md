@@ -180,7 +180,7 @@ aggregates functions executed for each group same as simple `GROUP BY` clauses, 
 ```postgresql
 SELECT s.firstname || ' ' || s.lastname AS "StudentName"
      , s.group                          AS "Group"
-     , AVG(cg.grade)                    AS "AvgGrade"
+     , AVG(cg.grade)                    AS "AverageGrade"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 GROUP BY GROUPING SETS ( ("StudentName", s.group), (s.group));
@@ -190,7 +190,7 @@ GROUP BY GROUPING SETS ( ("StudentName", s.group), (s.group));
 
 ```postgresql
 SELECT s.firstname || ' ' || s.lastname AS "Name"
-     , AVG(cg.grade)                    AS "AvgGrade"
+     , AVG(cg.grade)                    AS "AverageGrade"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 GROUP BY "Name"
@@ -198,7 +198,7 @@ GROUP BY "Name"
 UNION ALL
 
 SELECT s.group       AS "Group"
-     , AVG(cg.grade) AS "AvgGrade"
+     , AVG(cg.grade) AS "AverageGrade"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 GROUP BY "Group"
