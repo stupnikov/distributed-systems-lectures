@@ -11,11 +11,11 @@
     * планета, континенты, страны.
 * [x] `INLINE VIEW`: группа и курс, упорядоченная по имени и фамилии.
 * [ ] `OVER ... PARTITION BY ...`: #TODO
-* [ ] `FILTER (WHERE ...)`: фильтрация результата.
+* [x] `FILTER (WHERE ...)`: фильтрация результата.
 * [x] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
 * [x] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
   таблицы в другую таблицу.
-* [ ] `INSERT ... ON CONFLICT DO UPDATE / NOTHING`: upsert.
+* [x] `INSERT ... ON CONFLICT DO UPDATE / NOTHING`: upsert.
 * [x] `INSERT ... RETURNING id`: возвращение id только что созданной записи.
 * [x] `REFERENCES ... ON DELETE ...`: cascade обновления / удаления.
 * [ ] `MATERIALIZED VIEW`.
@@ -255,6 +255,16 @@ ORDER BY s.lastname, s.firstname
 LIMIT 10;
 ```
 
+```postgresql
+SELECT s.*
+FROM students s
+WHERE s."group" = 'ИУ7-11М'
+ORDER BY s.lastname, s.firstname
+    FETCH FIRST 10 ROWS ONLY
+OFFSET 10 ROWS;
+
+```
+
 ### Inline View
 
 ```postgresql
@@ -395,7 +405,23 @@ FROM (SELECT cg.grade                                                          A
 WHERE cg.rn <= 3;
 ```
 
+Вывести среднюю оценку по группе по курсу РСОИ:
+
+```postgresql
+SELECT s."group"                                   AS "Group"
+     , AVG(cg.grade) OVER (PARTITION BY s."group") AS "AverageGrade"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+WHERE cg.course_id = (SELECT C.id FROM courses C WHERE C.name = 'РСОИ')
+GROUP BY s."group", "AverageGrade"
+ORDER BY "AverageGrade";
+
+```
+
 ### Filter
+
+* `CASE WHEN ... THEN ... ELSE ... END`
+* `FILTER (WHEN ...)`
 
 Вывести количество 2, 3, 4 и 5 в разрезе групп:
 
@@ -405,6 +431,18 @@ SELECT s."group"                                            AS "Group"
      , SUM(CASE WHEN FLOOR(cg.grade) = 3 THEN 1 ELSE 0 END) AS "3"
      , SUM(CASE WHEN FLOOR(cg.grade) = 4 THEN 1 ELSE 0 END) AS "4"
      , SUM(CASE WHEN FLOOR(cg.grade) = 5 THEN 1 ELSE 0 END) AS "5"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
+GROUP BY "Group";
+```
+
+```postgresql
+SELECT s."group"                                   AS "Group"
+     , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 2) AS "2"
+     , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 3) AS "3"
+     , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 4) AS "4"
+     , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 5) AS "5"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
@@ -499,10 +537,9 @@ VALUES (1, 1000)
      , (3, 1100);
 
 SELECT dep
-     , SUM(salary) / (SELECT COUNT(*) FROM employee ee WHERE e.dep = ee.dep)
-     , COUNT(e.salary)
+     , AVG(salary) OVER (PARTITION BY dep) AS rrr
 FROM employee e
-GROUP BY dep;
+ORDER BY rrr;
 
 SELECT dep
      , salary
@@ -510,13 +547,7 @@ SELECT dep
      , ROW_NUMBER() OVER (ORDER BY salary DESC) AS r
      -- / (SELECT count(*) FROM employee ee WHERE e.dep = ee.dep)
 FROM employee e
-ORDER BY r;
-
---------------------------------
------------- OTHER -------------
---------------------------------
-SELECT SUM(o.a) FILTER (WHERE a > 50), SUM(o.a)
-FROM one o;
+ORDER BY rrr;
 ```
 
 ### Данные для примеров
