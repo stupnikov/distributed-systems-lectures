@@ -13,7 +13,7 @@
 * [ ] `OVER ... PARTITION BY ...`: #TODO
 * [ ] `FILTER (WHERE ...)`: фильтрация результата.
 * [ ] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
-* [ ] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
+* [x] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
   таблицы в другую таблицу.
 * [ ] `INSERT ... ON CONFLICT DO UPDATE / NOTHING`: upsert.
 * [x] `INSERT ... RETURNING id`: возвращение id только что созданной записи.
@@ -157,6 +157,51 @@ FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
 WHERE cg.grade < 4
 GROUP BY StudentName;
+```
+
+### Subselect
+
+Вывести всех студентов, у которых есть хотя бы одна пятерка.
+
+```postgresql
+SELECT s.firstname || ' ' || s.lastname AS StudentName
+FROM students s
+WHERE EXISTS(SELECT 1 FROM course_grades cg WHERE cg.student_id = s.id AND cg.grade = 5)
+GROUP BY StudentName;
+```
+
+### Grouping by
+
+The result of the `SELECT` and `WHERE` clauses are grouped separately by each specified group in the grouping set, and
+aggregates functions executed for each group same as simple `GROUP BY` clauses, and then the final results are returned.
+
+Вывести средний бал всех студентов и средний бал по группе:
+
+```postgresql
+SELECT s.firstname || ' ' || s.lastname AS "StudentName"
+     , s.group                          AS "Group"
+     , AVG(cg.grade)                    AS "AvgGrade"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+GROUP BY GROUPING SETS ( ("StudentName", s.group), (s.group));
+```
+
+Аналогично решению через `UNION ALL`:
+
+```postgresql
+SELECT s.firstname || ' ' || s.lastname AS "Name"
+     , AVG(cg.grade)                    AS "AvgGrade"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+GROUP BY "Name"
+
+UNION ALL
+
+SELECT s.group       AS "Group"
+     , AVG(cg.grade) AS "AvgGrade"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+GROUP BY "Group"
 ```
 
 ### LATERAL JOIN
