@@ -10,7 +10,7 @@
     * вычисление факториала;
     * планета, континенты, страны.
 * [x] `INLINE VIEW`: группа и курс, упорядоченная по имени и фамилии.
-* [ ] `OVER ... PARTITION BY ...`: #TODO
+* [x] `OVER ... PARTITION BY ...`: #TODO
 * [x] `FILTER (WHERE ...)`: фильтрация результата.
 * [x] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
 * [x] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
@@ -129,11 +129,11 @@ WHERE c.id = 1;
 Количество студентов, у которых средний бал больше 4.2.
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname AS StudentName
-     , AVG(cg.grade)                    AS AverageGrade
+SELECT s.firstname || ' ' || s.lastname AS student_name
+     , AVG(cg.grade)                    AS average_grade
 FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
-GROUP BY StudentName
+GROUP BY student_name
 HAVING AVG(cg.grade) > 4.2;
 ```
 
@@ -141,13 +141,13 @@ HAVING AVG(cg.grade) > 4.2;
 
 ```postgresql
 -- с использованием DISTINCT
-SELECT DISTINCT s.firstname || ' ' || s.lastname AS StudentName
+SELECT DISTINCT s.firstname || ' ' || s.lastname AS student_name
 FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
 WHERE cg.grade < 4;
 
 -- с использованием GROUP BY
-SELECT s.firstname || ' ' || s.lastname AS StudentName
+SELECT s.firstname || ' ' || s.lastname AS student_name
 FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
 WHERE cg.grade < 4
@@ -155,11 +155,11 @@ GROUP BY s.id;
 ```
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname AS StudentName
+SELECT s.firstname || ' ' || s.lastname AS student_name
 FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
 WHERE cg.grade < 4
-GROUP BY StudentName;
+GROUP BY student_name;
 ```
 
 ### Subselect
@@ -167,10 +167,10 @@ GROUP BY StudentName;
 Вывести всех студентов, у которых есть хотя бы одна пятерка.
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname AS StudentName
+SELECT s.firstname || ' ' || s.lastname AS student_name
 FROM students s
 WHERE EXISTS(SELECT 1 FROM course_grades cg WHERE cg.student_id = s.id AND cg.grade = 5)
-GROUP BY StudentName;
+GROUP BY student_name;
 ```
 
 ### Grouping by
@@ -181,30 +181,30 @@ aggregates functions executed for each group same as simple `GROUP BY` clauses, 
 Вывести средний бал всех студентов и средний бал по группе:
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname AS "StudentName"
-     , s.group                          AS "Group"
-     , AVG(cg.grade)                    AS "AverageGrade"
+SELECT s.firstname || ' ' || s.lastname AS student_name
+     , s.group                          AS "group"
+     , AVG(cg.grade)                    AS average_grade
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
-GROUP BY GROUPING SETS ( ("StudentName", s.group), (s.group));
+GROUP BY GROUPING SETS ((student_name, s.group), (s.group));
 ```
 
 Аналогично решению через `UNION ALL`:
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname AS "Name"
-     , AVG(cg.grade)                    AS "AverageGrade"
+SELECT s.firstname || ' ' || s.lastname AS student_name
+     , AVG(cg.grade)                    AS average_grade
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
-GROUP BY "Name"
+GROUP BY student_name
 
 UNION ALL
 
-SELECT s.group       AS "Group"
-     , AVG(cg.grade) AS "AverageGrade"
+SELECT s.group       AS "group"
+     , AVG(cg.grade) AS average_grade
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
-GROUP BY "Group"
+GROUP BY "group"
 ```
 
 ### LATERAL JOIN
@@ -220,10 +220,10 @@ table expression) is evaluated once only.
 Найти какой предмет студент сдал лучше всего.
 
 ```postgresql
-SELECT s.firstname || ' ' || s.lastname                       AS StudentName
-     , s."group"                                              AS "Group"
-     , cg.grade                                               AS Grade
-     , (SELECT name FROM courses c WHERE cg.course_id = c.id) AS Course
+SELECT s.firstname || ' ' || s.lastname                       AS student_name
+     , s."group"                                              AS "group"
+     , cg.grade                                               AS grade
+     , (SELECT name FROM courses c WHERE cg.course_id = c.id) AS course
 FROM students s
     JOIN LATERAL (SELECT *
                   FROM course_grades cg
@@ -231,7 +231,7 @@ FROM students s
                   ORDER BY cg.grade DESC
                   LIMIT 1) cg
          ON TRUE
-ORDER BY "Group", StudentName, Grade DESC;
+ORDER BY "group", student_name, grade DESC;
 ```
 
 ### Pagination
@@ -268,11 +268,13 @@ OFFSET 10 ROWS;
 ### Inline View
 
 ```postgresql
-WITH student_avg_grade AS (SELECT s.firstname || ' ' || s.lastname AS student_name
-                                , AVG(cg.grade)                    AS average_grade
-                           FROM course_grades cg
-                               INNER JOIN students s ON s.id = cg.student_id
-                           GROUP BY student_name)
+WITH student_avg_grade AS (
+    SELECT s.firstname || ' ' || s.lastname AS student_name
+         , AVG(cg.grade)                    AS average_grade
+    FROM course_grades cg
+        INNER JOIN students s ON s.id = cg.student_id
+    GROUP BY student_name
+)
 SELECT *
 FROM student_avg_grade sag
 WHERE sag.average_grade > 4.2;
@@ -314,15 +316,17 @@ SELECT delete_students(ARRAY [1, 2, 3]);
 Рекурсивное вычисление факториала.
 
 ```postgresql
-WITH RECURSIVE fact (n, factorial) AS (SELECT 1::NUMERIC
-                                            , 1::NUMERIC
+WITH RECURSIVE fact (n, factorial) AS (
+    SELECT 1::NUMERIC
+         , 1::NUMERIC
 
-                                       UNION ALL
+    UNION ALL
 
-                                       SELECT n + 1         AS n
-                                            , factorial * n AS factorial
-                                       FROM fact
-                                       WHERE n < 20)
+    SELECT n + 1         AS n
+         , factorial * n AS factorial
+    FROM fact
+    WHERE n < 20
+)
 SELECT *
 FROM fact;
 ```
@@ -330,14 +334,16 @@ FROM fact;
 Вычисление чисел Фибоначчи:
 
 ```postgresql
-WITH RECURSIVE fib(a, b) AS (SELECT 0::NUMERIC
-                                  , 1::NUMERIC
+WITH RECURSIVE fib(a, b) AS (
+    SELECT 0::NUMERIC
+         , 1::NUMERIC
 
-                             UNION ALL
+    UNION ALL
 
-                             SELECT GREATEST(a, b), a + b AS a
-                             FROM fib
-                             WHERE a <= 100000)
+    SELECT GREATEST(a, b), a + b AS a
+    FROM fib
+    WHERE a <= 100000
+)
 SELECT a
 FROM fib;
 ```
@@ -369,35 +375,43 @@ VALUES (1, NULL, 'Планета Земля')
 ```
 
 ```postgresql
-WITH RECURSIVE recursive AS (SELECT g.id        AS id
-                                  , g.parent_id AS Parent
-                                  , g.name      AS Name
-                                  , 1           AS Level
-                             FROM geo g
-                             WHERE g.id = 1
+WITH RECURSIVE recursive AS (
+    SELECT g.id        AS id
+         , g.parent_id AS parent
+         , g.name      AS name
+         , 1           AS level
+    FROM geo g
+    WHERE g.id = 1
 
-                             UNION ALL
+    UNION ALL
 
-                             SELECT g.id                AS id
-                                  , g.parent_id         AS Parent
-                                  , g.name              AS NAME
-                                  , recursive.Level + 1 AS LEVEL
-                             FROM geo g
-                                 JOIN recursive
-                                      ON g.parent_id = recursive.id)
+    SELECT g.id                AS id
+         , g.parent_id         AS parent
+         , g.name              AS name
+         , recursive.level + 1 AS level
+    FROM geo g
+        JOIN recursive
+             ON g.parent_id = recursive.id
+)
 SELECT *
 FROM recursive;
 ```
 
 #### Window function
 
+Для простоты понимания можно считать, что Postgres сначала выполняет весь запрос (кроме сортировки и `LIMIT`), а потом
+только просчитывает оконные выражения.
+
+Окно — это некоторое выражение, описывающее набор строк, которые будет обрабатывать функция и порядок этой обработки.
+Причем окно может быть просто задано пустыми скобками (), т.е. окном являются все строки результата запроса.
+
 В каждой группе вывести топ 3 студентов по РСОИ.
 
 ```postgresql
 SELECT cg.*
-FROM (SELECT cg.grade                                                          AS Grade
-           , s.firstname || ' ' || s.lastname                                  AS StudentName
-           , s."group"                                                         AS "Group"
+FROM (SELECT cg.grade                                                          AS grade
+           , s.firstname || ' ' || s.lastname                                  AS student_name
+           , s."group"                                                         AS "group"
            , ROW_NUMBER() OVER (PARTITION BY s."group" ORDER BY cg.grade DESC) AS rn
       FROM course_grades cg
           INNER JOIN students s ON s.id = cg.student_id
@@ -408,25 +422,26 @@ WHERE cg.rn <= 3;
 Вывести среднюю оценку по группе по курсу РСОИ:
 
 ```postgresql
-SELECT s."group"                                   AS "Group"
-     , AVG(cg.grade) OVER (PARTITION BY s."group") AS "AverageGrade"
-FROM students s
-    INNER JOIN course_grades cg ON s.id = cg.student_id
-WHERE cg.course_id = (SELECT C.id FROM courses C WHERE C.name = 'РСОИ')
-GROUP BY s."group", "AverageGrade"
-ORDER BY "AverageGrade";
-
+SELECT r."group"       AS "group"
+     , r.average_grade AS average_grade
+FROM (SELECT s.group
+           , AVG(cg.grade) OVER (PARTITION BY s."group") AS average_grade
+      FROM students AS s
+          INNER JOIN course_grades cg ON s.id = cg.student_id
+      WHERE cg.course_id = (SELECT C.id FROM courses C WHERE C.name = 'РСОИ')) r
+GROUP BY "group", average_grade
+ORDER BY average_grade DESC;
 ```
 
 ### Filter
 
-* `CASE WHEN ... THEN ... ELSE ... END`
-* `FILTER (WHEN ...)`
+* `CASE WHEN ... THEN ... ELSE ... END` – условие обработки результата.
+* `FILTER (WHEN ...)` – фильтрация результата (полезно для `SUM`)
 
 Вывести количество 2, 3, 4 и 5 в разрезе групп:
 
 ```postgresql
-SELECT s."group"                                            AS "Group"
+SELECT s."group"                                            AS "group"
      , SUM(CASE WHEN FLOOR(cg.grade) = 2 THEN 1 ELSE 0 END) AS "2"
      , SUM(CASE WHEN FLOOR(cg.grade) = 3 THEN 1 ELSE 0 END) AS "3"
      , SUM(CASE WHEN FLOOR(cg.grade) = 4 THEN 1 ELSE 0 END) AS "4"
@@ -434,11 +449,11 @@ SELECT s."group"                                            AS "Group"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
-GROUP BY "Group";
+GROUP BY "group";
 ```
 
 ```postgresql
-SELECT s."group"                                   AS "Group"
+SELECT s."group"                                   AS "group"
      , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 2) AS "2"
      , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 3) AS "3"
      , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 4) AS "4"
@@ -446,14 +461,17 @@ SELECT s."group"                                   AS "Group"
 FROM students s
     INNER JOIN course_grades cg ON s.id = cg.student_id
 WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
-GROUP BY "Group";
+GROUP BY "group";
 ```
 
 ### Upsert
 
+Условия срабатывания:
+
 * `ON CONFLICT (id)` – constraint violation на поле.
 * `ON CONFLICT ON CONSTRAINT students_pkey` – constraint violation по имени.
 
+Варианты разрешения конфликта:
 
 * `DO UPDATE SET field = EXCLUDED.field ` – обновить значения поля данными из блока `VALUES`;
 * `DO NOTHING` – ничего не делать;
@@ -469,91 +487,42 @@ ON CONFLICT(id) DO UPDATE SET firstname = excluded.firstname
 SELECT * FROM students WHERE id = 1;
 ```
 
-### OLD
+### Select for update
 
 ```postgresql
---------------------------------
------- MATERIALIZED VIEW -------
---------------------------------
-CREATE OR REPLACE VIEW one_multi_two
-AS
-SELECT DISTINCT o.a * t.c AS m
-FROM one o
-   , two t;
+SELECT * FROM students s WHERE id = 1 FOR UPDATE;
+```
 
-SELECT *
-FROM one_multi_two ot
-ORDER BY ot.m;
+### Materialized View
 
-UPDATE one
-SET a = -1
-WHERE a = 1;
+```postgresql
+CREATE MATERIALIZED VIEW average_grade_by_groups AS
+SELECT r."group"       AS "group"
+     , r.average_grade AS average_grade
+FROM (SELECT s.group
+           , AVG(cg.grade) OVER (PARTITION BY s."group") AS average_grade
+      FROM students AS s
+          INNER JOIN course_grades cg ON s.id = cg.student_id
+      WHERE cg.course_id = (SELECT C.id FROM courses C WHERE C.name = 'РСОИ')) r
+GROUP BY "group", average_grade
+ORDER BY average_grade DESC;
 
-DROP MATERIALIZED VIEW one_multi_two;
-CREATE MATERIALIZED VIEW one_multi_two
-AS
-SELECT o.a * t.c AS m
-FROM one o
-   , two t;
+SELECT * FROM average_grade_by_groups;
 
+UPDATE course_grades
+SET grade = 5
+WHERE course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
+  AND student_id IN (SELECT s.id FROM students s WHERE s."group" = 'ИУ7-11М');
 
-SELECT *
-FROM one_multi_two ot
-ORDER BY ot.m;
+SELECT * FROM average_grade_by_groups;
 
-UPDATE one
-SET a = 1
-WHERE a = -1;
+REFRESH MATERIALIZED VIEW average_grade_by_groups;
 
-REFRESH MATERIALIZED VIEW one_multi_two;
-
-SELECT *
-FROM one_multi_two ot
-ORDER BY ot.m;
-
-SELECT *
-FROM one;
---------------------------------
----- OVER ... PARTITION BY -----
---------------------------------
-
--- 	Для простоты понимания можно считать, что postgres сначала выполняет весь запрос (кроме сортировки и LIMIT), а потом только просчитывает оконные выражения.
--- 	Окно — это некоторое выражение, описывающее набор строк, которые будет обрабатывать функция и порядок этой обработки.
--- 	Причем окно может быть просто задано пустыми скобками (), т.е. окном являются все строки результата запроса.
-
-CREATE
-    TABLE employee
-(
-    dep    INT,
-    salary INT
-);
-
-INSERT INTO employee
-VALUES (1, 1000)
-     , (2, 500)
-     , (2, 6000)
-     , (3, 700)
-     , (3, 800)
-     , (3, 1100);
-
-SELECT dep
-     , AVG(salary) OVER (PARTITION BY dep) AS rrr
-FROM employee e
-ORDER BY rrr;
-
-SELECT dep
-     , salary
-     , SUM(salary) OVER (PARTITION BY dep) / (SELECT COUNT(*) FROM employee ee WHERE e.dep = ee.dep)
-     , ROW_NUMBER() OVER (ORDER BY salary DESC) AS r
-     -- / (SELECT count(*) FROM employee ee WHERE e.dep = ee.dep)
-FROM employee e
-ORDER BY rrr;
+SELECT * FROM average_grade_by_groups;
 ```
 
 ### Данные для примеров
 
 1. [Modern SQL](https://modern-sql.com/)
-2. [Modern SQL (CMU Intro to Database Systems / Fall 2022)](https://www.youtube.com/watch?v=II5qNuxfSoo)
-3. [We need tool support for keyset pagination](https://use-the-index-luke.com/no-offset)
-4. [Modern SQL formatting](https://gist.github.com/mattmc3/38a85e6a4ca1093816c08d4815fbebfb)
-5. [SQL Slides by Markus Winand](https://winand.at/sql-slides-for-developers)
+2. [We need tool support for keyset pagination](https://use-the-index-luke.com/no-offset)
+3. [SQL Slides by Markus Winand](https://winand.at/sql-slides-for-developers)
