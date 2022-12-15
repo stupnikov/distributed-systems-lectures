@@ -12,13 +12,16 @@
 * [x] `INLINE VIEW`: группа и курс, упорядоченная по имени и фамилии.
 * [ ] `OVER ... PARTITION BY ...`: #TODO
 * [ ] `FILTER (WHERE ...)`: фильтрация результата.
-* [ ] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
+* [x] `SUM(CASE a > 0 THEN 1 ELSE 0)`: сложные фильтры.
 * [x] `INSERT INTO ... (SELECT ... FROM ...)`, `SELECT * INTO ... FROM ...`, `CREATE TABLE ... (LIKE ...)`: копирование
   таблицы в другую таблицу.
 * [ ] `INSERT ... ON CONFLICT DO UPDATE / NOTHING`: upsert.
 * [x] `INSERT ... RETURNING id`: возвращение id только что созданной записи.
-* [ ] `REFERENCES ... ON DELETE ...`: cascade обновления / удаления.
-* [ ] `JSON`
+* [x] `REFERENCES ... ON DELETE ...`: cascade обновления / удаления.
+* [ ] `MATERIALIZED VIEW`.
+* [ ] `SELECT FOR UPDATE`.
+* [ ] `JSON`.
+* [ ] `ARRAY`.
 
 ### Пример
 
@@ -255,13 +258,11 @@ LIMIT 10;
 ### Inline View
 
 ```postgresql
-WITH student_avg_grade AS (
-    SELECT s.firstname || ' ' || s.lastname AS student_name
-         , AVG(cg.grade)                    AS average_grade
-    FROM course_grades cg
-        INNER JOIN students s ON s.id = cg.student_id
-    GROUP BY student_name
-)
+WITH student_avg_grade AS (SELECT s.firstname || ' ' || s.lastname AS student_name
+                                , AVG(cg.grade)                    AS average_grade
+                           FROM course_grades cg
+                               INNER JOIN students s ON s.id = cg.student_id
+                           GROUP BY student_name)
 SELECT *
 FROM student_avg_grade sag
 WHERE sag.average_grade > 4.2;
@@ -303,17 +304,15 @@ SELECT delete_students(ARRAY [1, 2, 3]);
 Рекурсивное вычисление факториала.
 
 ```postgresql
-WITH RECURSIVE fact (n, factorial) AS (
-    SELECT 1::NUMERIC
-         , 1::NUMERIC
+WITH RECURSIVE fact (n, factorial) AS (SELECT 1::NUMERIC
+                                            , 1::NUMERIC
 
-    UNION ALL
+                                       UNION ALL
 
-    SELECT n + 1         AS n
-         , factorial * n AS factorial
-    FROM fact
-    WHERE n < 20
-)
+                                       SELECT n + 1         AS n
+                                            , factorial * n AS factorial
+                                       FROM fact
+                                       WHERE n < 20)
 SELECT *
 FROM fact;
 ```
@@ -321,16 +320,14 @@ FROM fact;
 Вычисление чисел Фибоначчи:
 
 ```postgresql
-WITH RECURSIVE fib(a, b) AS (
-    SELECT 0::NUMERIC
-         , 1::NUMERIC
+WITH RECURSIVE fib(a, b) AS (SELECT 0::NUMERIC
+                                  , 1::NUMERIC
 
-    UNION ALL
+                             UNION ALL
 
-    SELECT GREATEST(a, b), a + b AS a
-    FROM fib
-    WHERE a <= 100000
-)
+                             SELECT GREATEST(a, b), a + b AS a
+                             FROM fib
+                             WHERE a <= 100000)
 SELECT a
 FROM fib;
 ```
@@ -362,24 +359,22 @@ VALUES (1, NULL, 'Планета Земля')
 ```
 
 ```postgresql
-WITH RECURSIVE recursive AS (
-    SELECT g.id        AS id
-         , g.parent_id AS Parent
-         , g.name      AS Name
-         , 1           AS Level
-    FROM geo g
-    WHERE g.id = 1
+WITH RECURSIVE recursive AS (SELECT g.id        AS id
+                                  , g.parent_id AS Parent
+                                  , g.name      AS Name
+                                  , 1           AS Level
+                             FROM geo g
+                             WHERE g.id = 1
 
-    UNION ALL
+                             UNION ALL
 
-    SELECT g.id                AS id
-         , g.parent_id         AS Parent
-         , g.name              AS NAME
-         , recursive.Level + 1 AS LEVEL
-    FROM geo g
-        JOIN recursive
-             ON g.parent_id = recursive.id
-)
+                             SELECT g.id                AS id
+                                  , g.parent_id         AS Parent
+                                  , g.name              AS NAME
+                                  , recursive.Level + 1 AS LEVEL
+                             FROM geo g
+                                 JOIN recursive
+                                      ON g.parent_id = recursive.id)
 SELECT *
 FROM recursive;
 ```
@@ -390,16 +385,50 @@ FROM recursive;
 
 ```postgresql
 SELECT cg.*
-FROM (
-    SELECT cg.grade                                                          AS Grade
-         , s.firstname || ' ' || s.lastname                                  AS StudentName
-         , s."group"                                                         AS "Group"
-         , ROW_NUMBER() OVER (PARTITION BY s."group" ORDER BY cg.grade DESC) AS rn
-    FROM course_grades cg
-        INNER JOIN students s ON s.id = cg.student_id
-    WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
-) cg
+FROM (SELECT cg.grade                                                          AS Grade
+           , s.firstname || ' ' || s.lastname                                  AS StudentName
+           , s."group"                                                         AS "Group"
+           , ROW_NUMBER() OVER (PARTITION BY s."group" ORDER BY cg.grade DESC) AS rn
+      FROM course_grades cg
+          INNER JOIN students s ON s.id = cg.student_id
+      WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')) cg
 WHERE cg.rn <= 3;
+```
+
+### Filter
+
+Вывести количество 2, 3, 4 и 5 в разрезе групп:
+
+```postgresql
+SELECT s."group"                                            AS "Group"
+     , SUM(CASE WHEN FLOOR(cg.grade) = 2 THEN 1 ELSE 0 END) AS "2"
+     , SUM(CASE WHEN FLOOR(cg.grade) = 3 THEN 1 ELSE 0 END) AS "3"
+     , SUM(CASE WHEN FLOOR(cg.grade) = 4 THEN 1 ELSE 0 END) AS "4"
+     , SUM(CASE WHEN FLOOR(cg.grade) = 5 THEN 1 ELSE 0 END) AS "5"
+FROM students s
+    INNER JOIN course_grades cg ON s.id = cg.student_id
+WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
+GROUP BY "Group";
+```
+
+### Upsert
+
+* `ON CONFLICT (id)` – constraint violation на поле.
+* `ON CONFLICT ON CONSTRAINT students_pkey` – constraint violation по имени.
+
+
+* `DO UPDATE SET field = EXCLUDED.field ` – обновить значения поля данными из блока `VALUES`;
+* `DO NOTHING` – ничего не делать;
+
+```postgresql
+INSERT INTO students (id, firstname, lastname, github, "group")
+VALUES (1, 'Alexey', 'Romanov', 'romanow', 'ИУ7-13М')
+ON CONFLICT(id) DO UPDATE SET firstname = excluded.firstname
+                            , lastname  = excluded.lastname
+                            , github    = excluded.github
+                            , "group"   = excluded."group";
+
+SELECT * FROM students WHERE id = 1;
 ```
 
 ### OLD
