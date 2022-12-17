@@ -32,6 +32,8 @@ CREATE TABLE students
     "group"   VARCHAR(8)  NOT NULL CHECK ("group" IN ('ИУ7-11М', 'ИУ7-12М', 'ИУ7-13М'))
 );
 
+CREATE UNIQUE INDEX udx_students_github ON students (github);
+
 CREATE TABLE courses
 (
     id   SERIAL PRIMARY KEY,
@@ -122,14 +124,6 @@ FROM course_grades cg
 WHERE cg.grade < 4;
 
 -- с использованием GROUP BY
-SELECT s.firstname || ' ' || s.lastname AS student_name
-FROM course_grades cg
-    INNER JOIN students s ON s.id = cg.student_id
-WHERE cg.grade < 4
-GROUP BY s.id;
-```
-
-```postgresql
 SELECT s.firstname || ' ' || s.lastname AS student_name
 FROM course_grades cg
     INNER JOIN students s ON s.id = cg.student_id
@@ -571,12 +565,11 @@ ORDER BY average_grade DESC;
 * `DO NOTHING` – ничего не делать;
 
 ```postgresql
-INSERT INTO students (id, firstname, lastname, github, "group")
-VALUES (1, 'Alexey', 'Romanov', 'romanow', 'ИУ7-13М')
-ON CONFLICT(id) DO UPDATE SET firstname = excluded.firstname
-                            , lastname  = excluded.lastname
-                            , github    = excluded.github
-                            , "group"   = excluded."group";
+INSERT INTO students (firstname, lastname, github, "group")
+VALUES ('Alexey', 'Romanov', 'gryteck', 'ИУ7-13М')
+ON CONFLICT(github) DO UPDATE SET firstname = excluded.firstname
+                                , lastname  = excluded.lastname
+                                , "group"   = excluded."group";
 
 SELECT * FROM students WHERE id = 1;
 ```
@@ -667,10 +660,9 @@ SELECT data @> '{"login": "ronin"}' FROM json_table;
 SELECT data || '{"new_hobbies": ["Road Bikes"]}'::JSONB FROM json_table;
 
 SELECT data @ ? '$.hobbies[*] >= 2' FROM json_table;
-
 ```
 
-### Данные для примеров
+### Ссылки
 
 1. [Modern SQL](https://modern-sql.com/)
 2. [We need tool support for keyset pagination](https://use-the-index-luke.com/no-offset)
