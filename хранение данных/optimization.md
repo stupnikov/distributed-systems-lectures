@@ -818,12 +818,12 @@ WHERE tablename = 'four'
 складываются для оценки общей избирательности.
 
 ```postgresql
-EXPLAIN SELECT * FROM four WHERE c <= 200;
+EXPLAIN SELECT * FROM four WHERE c > 200;
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=39859 width=10)
-  Filter: (c <= 200)
+Seq Scan on four  (cost=0.00..1791.00 rows=60141 width=10)
+  Filter: (c > 200)
   
 // Сумма все most_common_freqs, для которых их значение в most_common_vals удовлетворяет условию поиска
 mvc_selectivity = SELECT SUM(r.mcf)
@@ -832,13 +832,13 @@ mvc_selectivity = SELECT SUM(r.mcf)
                       UNNEST(stat.most_common_freqs)) r(mcv, mcf)
                   WHERE tablename = 'four'
                     AND attname = 'c'
-                    AND r.mcv <= 200;
+                    AND r.mcv > 200;
 
-mvc_selectivity = 0.013133333
+mvc_selectivity = 0.0133
 
 // Вычисление по histogram_bounds
 histogram_selectivity = ((количество полных интервалов) + (current - bucket[4].min)/(bucket[4].max - bucket[4].min)) / num_buckets =
-    (3 + (200 - 153) / (202 - 153)) / 10 = 0.39591836734
+    1 - (3 + (200 - 153) / (202 - 153)) / 10 = 0.60408163265
 
 // Количество значений, представленных гистограммой
 histogram_fraction = 1 - sum(most_common_freqs)
@@ -850,9 +850,9 @@ histogram_fraction = SELECT 1 - (SELECT sum(mcf) FROM unnest(stat.most_common_fr
 histogram_fraction = 0.9735666643828154    
 
 selectivity = mcv_selectivity + histogram_selectivity * histogram_fraction =
-    0.013133333 + 0.39591836734 * 0.9735666643828154 = 0.39858625725
+    0.0133 + 0.60408163265 * 0.9735666643828154 = 0.60141374011
     
-rows = reltuples * selectivity = 10000 * 0.39858625725 ~= 39859  
+rows = reltuples * selectivity = 10000 * 0.60141374011 ~= 60141  
 ```
 
 ## Литература
