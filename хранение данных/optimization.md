@@ -610,12 +610,12 @@ CREATE TABLE IF NOT EXISTS four
 (
     a INT,
     b VARCHAR(10),
-    c VARCHAR(10)
+    c INT
 );
 
 TRUNCATE four;
-INSERT INTO four(a, b, c) 
-SELECT s.id, random_string(1), random_string(4)
+INSERT INTO four(a, b, c)
+SELECT s.id, random_string(1), (RANDOM() * 500)::INT
 FROM GENERATE_SERIES(1, 100000) AS s(id);
 
 ANALYSE four;
@@ -662,13 +662,13 @@ WHERE tablename = 'four'
 
 ```
 
-|   Attribute Name  | Value |
-|-------------------|-------|
-| null_frac         |    0  |
-| n_distinct        |   -1  |
-| most_common_vals  |  null |
-| most_common_freqs |  null |
-| histogram_bounds  | {1,10149,20413,30398,40358,50596,60352,70186,80247,89994,100000} |
+|    Attribute Name   | Value |
+|---------------------|-------|
+| `null_frac`         |    0  |
+| `n_distinct`        |   -1  |
+| `most_common_vals`  |  null |
+| `most_common_freqs` |  null |
+| `histogram_bounds`  | {1,10149,20413,30398,40358,50596,60352,70186,80247,89994,100000} |
 
 ```postgresql
 EXPLAIN SELECT * FROM four WHERE a <= 25000;
@@ -681,8 +681,8 @@ EXPLAIN SELECT * FROM four WHERE a <= 25000;
 Seq Scan on four  (cost=0.00..1791.00 rows=24594 width=11)
   Filter: (a <= 25000)
 
-selectivity = ((количество полных интервалов) + (current - bucket[2].min)/(bucket[2].max - bucket[2].min)) / num_buckets =
-(2 + (25000 - 20413) / (30398 - 20413)) / 10 = 0.24593890836
+selectivity = ((количество полных интервалов) + (current - bucket[3].min)/(bucket[3].max - bucket[3].min)) / num_buckets =
+    (2 + (25000 - 20413) / (30398 - 20413)) / 10 = 0.24593890836
 
 rows = reltuples * selectivity = 10000 * 0.24593890836 ~= 24594
 ```
@@ -702,13 +702,13 @@ WHERE tablename = 'four'
   AND attname = 'b';
 ```
 
-|   Attribute Name  | Value |
-|-------------------|-------|
-| null_frac         |    0  |
-| n_distinct        |   26  |
-| most_common_vals  | {G,I,M,Y,A,V,N,Q,O,L,B,C,T,P,R,W,H,X,D,U,Z,J,S,E,K,F} |
-| most_common_freqs | {0.04100000113248825,0.03999999910593033,0.03983333334326744,0.03946666792035103,0.03933333232998848,0.039133332669734955,0.03906666487455368,0.03896666690707207,0.038866665214300156,0.03876666724681854,0.038733333349227905,0.038466665893793106,0.03843333199620247,0.03830000013113022,0.03830000013113022,0.03826666623353958,0.038233332335948944,0.03813333436846733,0.03776666522026062,0.037566665560007095,0.03739999979734421,0.03736666589975357,0.03736666589975357,0.037300001829862595,0.037166666239500046,0.036766666918992996} |
-| histogram_bounds  |  null |
+|    Attribute Name   | Value |
+|---------------------|-------|
+| `null_frac`         |    0  |
+| `n_distinct`        |   26  |
+| `most_common_vals`  | {G,I,M,Y,A,V,N,Q,O,L,B,C,T,P,R,W,H,X,D,U,Z,J,S,E,K,F} |
+| `most_common_freqs` | {0.04100000113248825,0.03999999910593033,0.03983333334326744,0.03946666792035103,0.03933333232998848,0.039133332669734955,0.03906666487455368,0.03896666690707207,0.038866665214300156,0.03876666724681854,0.038733333349227905,0.038466665893793106,0.03843333199620247,0.03830000013113022,0.03830000013113022,0.03826666623353958,0.038233332335948944,0.03813333436846733,0.03776666522026062,0.037566665560007095,0.03739999979734421,0.03736666589975357,0.03736666589975357,0.037300001829862595,0.037166666239500046,0.036766666918992996} |
+| `histogram_bounds`  |  null |
 
 ```postgresql
 EXPLAIN SELECT * FROM four WHERE b = 'A';
@@ -747,13 +747,13 @@ WHERE tablename = 'four'
   AND attname = 'b';
 ```
 
-|   Attribute Name  | Value |
-|-------------------|-------|
-| null_frac         |    0  |
-| n_distinct        |   26  |
-| most_common_vals  | {I,V,A,M,J,B,H,C,G,Q} |
-| most_common_freqs | {0.039500001817941666,0.039480000734329224,0.039329998195171356,0.03914999961853027,0.038839999586343765,0.03880999982357025,0.03880000114440918,0.03878000006079674,0.03863000124692917,0.03863000124692917} |
-| histogram_bounds  | {D,E,K,L,O,P,S,U,W,Y,Z} |
+|    Attribute Name   | Value |
+|---------------------|-------|
+| `null_frac`         |    0  |
+| `n_distinct`        |   26  |
+| `most_common_vals`  | {I,V,A,M,J,B,H,C,G,Q} |
+| `most_common_freqs` | {0.039500001817941666,0.039480000734329224,0.039329998195171356,0.03914999961853027,0.038839999586343765,0.03880999982357025,0.03880000114440918,0.03878000006079674,0.03863000124692917,0.03863000124692917} |
+| `histogram_bounds`  | {D,E,K,L,O,P,S,U,W,Y,Z} |
 
 `L` отсутствует в `most_common_vals`.
 
@@ -762,20 +762,98 @@ EXPLAIN SELECT * FROM four WHERE b = 'L';
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=60530 width=11)
-  Filter: ((b)::text > 'K'::text)
+Seq Scan on four  (cost=0.00..1791.00 rows=3813 width=11)
+  Filter: ((b)::text = 'L'::text)
 
 selectivity = (1 - sum(most_common_freqs)) / (n_distinct - length(most_common_values)) =
     (1 - 0.38995) / (26 - 10) = 0.038128125 
+    
+rows = reltuples * selectivity = 10000 * 0.038128125 ~= 3813
 
-sum(m) = SELECT (SELECT sum(mcf) FROM unnest(most_common_freqs) mcf) AS sum_mcf 
-         FROM pg_stats
-         WHERE tablename = 'four'
-            AND attname = 'b';
+sum(m) = SELECT (SELECT sum(mcf) FROM unnest(stat.most_common_freqs) mcf) AS sum_mcf 
+         FROM pg_stats stat
+         WHERE stat.tablename = 'four'
+            AND stat.attname = 'b';
 ```
 
 ##### Вычисление по `most_common_vals` и `histogram_bounds`
 
+Предыдущий пример с поиском по `a` <= 25000 был большим упрощением, т.к. это уникальный столбец (`n_distinct` = 1), у
+него нет значений в списке `most_common_vals` (т.к. все встречаются одинаково). Для неуникального столбца обычно
+создаётся как гистограмма, так и список `most_common_vals`, при этом гистограмма не включает значения, представленные в
+списке `most_common_vals`.
+
+```
+selectivity = mcv_selectivity + histogram_selectivity * histogram_fraction
+```
+
+```postgresql
+ALTER TABLE four
+    ALTER COLUMN c SET STATISTICS 10;
+
+ANALYSE four;
+
+SELECT null_frac
+     , n_distinct
+     , most_common_vals
+     , most_common_freqs
+     , histogram_bounds
+FROM pg_stats
+WHERE tablename = 'four'
+  AND attname = 'c';
+```
+
+|    Attribute Name   |   Value  |
+|---------------------|----------|
+| `null_frac`         |      0   |
+| `n_distinct`        |    501   |
+| `most_common_vals`  | {328,26,278,70,127,159,308,61,305,370} |
+| `most_common_freqs` | {0.00286666676402092,0.0027666667010635138,0.0027000000700354576,0.0026000000070780516,0.0026000000070780516,0.0026000000070780516,0.0026000000070780516,0.0025666665751487017,0.0025666665751487017,0.0025666665751487017} |
+| `histogram_bounds`  | {0,52,103,153,202,250,300,352,403,451,500} |
+
+В случае, если значения в столбце не уникальны, то оптимизатор применяет условие к каждому `most_common_vals` и
+суммирует частоты `most_common_freqs`, для которых условие является верным. Это даёт точную оценку избирательности для
+той части таблицы, которая содержит значения из списка `most_common_vals`. Подобным же образом используется гистограмма
+для оценки избирательности для той части таблицы, которая не содержит значения из списка MCV, а затем эти две цифры
+складываются для оценки общей избирательности.
+
+```postgresql
+EXPLAIN SELECT * FROM four WHERE c <= 200;
+```
+
+```
+Seq Scan on four  (cost=0.00..1791.00 rows=39859 width=10)
+  Filter: (c <= 200)
+  
+// Сумма все most_common_freqs, для которых их значение в most_common_vals удовлетворяет условию поиска
+mvc_selectivity = SELECT SUM(r.mcf)
+                  FROM pg_stats stat
+                     , ROWS FROM (UNNEST(stat.most_common_vals::TEXT::INT[]),
+                      UNNEST(stat.most_common_freqs)) r(mcv, mcf)
+                  WHERE tablename = 'four'
+                    AND attname = 'c'
+                    AND r.mcv <= 200;
+
+mvc_selectivity = 0.013133333
+
+// Вычисление по histogram_bounds
+histogram_selectivity = ((количество полных интервалов) + (current - bucket[4].min)/(bucket[4].max - bucket[4].min)) / num_buckets =
+    (3 + (200 - 153) / (202 - 153)) / 10 = 0.39591836734
+
+// Количество значений, представленных гистограммой
+histogram_fraction = 1 - sum(most_common_freqs)
+histogram_fraction = SELECT 1 - (SELECT sum(mcf) FROM unnest(stat.most_common_freqs) mcf) AS sum_mcf
+                     FROM pg_stats stat
+                     WHERE stat.tablename = 'four'
+                       AND stat.attname = 'c';
+
+histogram_fraction = 0.9735666643828154    
+
+selectivity = mcv_selectivity + histogram_selectivity * histogram_fraction =
+    0.013133333 + 0.39591836734 * 0.9735666643828154 = 0.39858625725
+    
+rows = reltuples * selectivity = 10000 * 0.39858625725 ~= 39859  
+```
 
 ## Литература
 
