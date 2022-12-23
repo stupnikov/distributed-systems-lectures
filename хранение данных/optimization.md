@@ -4,7 +4,7 @@
 
 ![Join Types](images/join_types.png)
 
-```postgresql
+```sql
 CREATE OR REPLACE FUNCTION random_string(length INT)
     RETURNS VARCHAR AS
 $$
@@ -43,7 +43,7 @@ FROM GENERATE_SERIES(6, 15) AS i;
 Оператор внутреннего соединения. Порядок таблиц для оператора неважен, поскольку оператор является симметричным.
 Выбираются только совпадающие данные из объединяемых таблиц.
 
-  ```postgresql
+  ```sql
 SELECT o.id   AS id1
      , t.id   AS id2
      , o.name AS name1
@@ -65,7 +65,7 @@ FROM one o
 Такое объединение вернет данные из обеих таблиц (совпадающие по условию объединения) ПЛЮС дополнит выборку оставшимися
 данными из внешней таблицы, которые по условию не подходят, заполнив недостающие данные значением `NULL`.
 
-```postgresql
+```sql
 SELECT o.id   AS id1
      , t.id   AS id2
      , o.name AS name1
@@ -96,7 +96,7 @@ FROM one o
 
 Работают они одинаково, разница заключается в том что `LEFT` - указывает что "внешней" таблицей будет находящаяся слева.
 
-```postgresql
+```sql
 SELECT o.id   AS id1
      , t.id   AS id2
      , o.name AS name1
@@ -125,7 +125,7 @@ FROM one o
 левой таблицы сцепляется с каждой строкой правой таблицы. В результате получается таблица со всеми возможными
 сочетаниями строк обеих таблиц.
 
-```postgresql
+```sql
 SELECT o.id   AS id1
      , t.id   AS id2
      , o.name AS name1
@@ -169,7 +169,7 @@ FROM one o
 * Сможет ли метод доступа отдавать данные сразу в нужном порядке или надо отдельно применить сортировку?
 * Можно ли применить метод доступа для поиска `null`?
 
-```postgresql
+```sql
 CREATE TABLE three
 (
     a INT,
@@ -206,7 +206,7 @@ Index Scan using idx_three_a on three  (cost=0.29..8.31 rows=1 width=7)
 прочитана только один раз. Сканирование по битовой карте позволяет избежать повторных обращений к одной и той же
 странице данных.
 
-```postgresql
+```sql
 EXPLAIN SELECT * FROM three WHERE a <= 100;
 ```
 
@@ -225,7 +225,7 @@ Bitmap Heap Scan on three  (cost=4.99..228.28 rows=90 width=7)
 использовать несколько индексов одновременно. Для каждого индекса строятся битовые карты версий строк, которые затем
 побитово логически умножаются (`AND`), либо логически складываются (`OR`).
 
-```postgresql
+```sql
 CREATE INDEX idx_three_b ON three (b);
 ANALYSE three;
 
@@ -248,7 +248,7 @@ Bitmap Heap Scan on three  (cost=17.18..21.19 rows=1 width=7)
 прочитать из них необходимые данные. Но если индекс содержит все данные, требующиеся в запросе, то оптимизатор может
 применить `Index Only Scan`.
 
-```postgresql
+```sql
 EXPLAIN SELECT a FROM three WHERE a <= 100;
 ```
 
@@ -265,7 +265,7 @@ Index Only Scan using idx_three_a on three  (cost=0.29..6.08 rows=102 width=4)
 Индексы работают тем лучше, чем выше селективность условия, то есть чем меньше строк ему удовлетворяет. При увеличении
 выборки возрастают и накладные расходы на чтение страниц индекса.
 
-```postgresql
+```sql
 EXPLAIN SELECT * FROM three WHERE a <= 40000;
 ```
 
@@ -412,7 +412,135 @@ GIN расшифровывается как Generalized Inverted Index — об�
     денормализовать две таблицы в одну с осознанной избыточностью данных, либо нужные записи из маленькой таблицы
     поднять заранее и в `WHERE` передавать id в блоке `IN`.
 
+### EXPLAIN
+
+```sql
+CREATE TABLE IF NOT EXISTS four
+(
+    a INT,
+    b VARCHAR(80),
+    c INT
+);
+
+TRUNCATE four;
+INSERT INTO four (a, b, c)
+SELECT s.id, random_string(8), (CASE ROUND(3 * RANDOM()) WHEN 3 THEN (RANDOM() * 500)::INT END)
+FROM GENERATE_SERIES(1, 10000) AS s(id);
+
+ANALYSE four;
+EXPLAIN SELECT * FROM four;
+
+-- Статистика перестраивается после определенного количества изменений данных
+INSERT INTO four (a, b, c)
+SELECT s.id, random_string(8), (RANDOM() * 500)::INT
+FROM GENERATE_SERIES(1, 10) AS s(id);
+
+-- Получаем старые данных из статистики
+EXPLAIN ANALYSE SELECT * FROM four;
+
+-- Перестраиваем статистику
+ANALYSE four;
+-- Получаем корректные данные из статистики
+EXPLAIN ANALYSE SELECT * FROM four;
+```
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_four_a ON four (a);
+-- Если условие имеет маленькую селективность, то будет выполняться sequence scan, т.к. оптимизатор решит что это быстрее
+EXPLAIN SELECT * FROM four WHERE a > 50;
+
+-- При большой селективности Postgres используем индекс
+EXPLAIN SELECT * FROM four WHERE a > 9900;
+```
+
+```sql
+EXPLAIN (ANALYSE, VERBOSE, BUFFERS)
+SELECT * FROM four WHERE a = 10;
+
+EXPLAIN SELECT a FROM four WHERE a = 10;
+
+DROP INDEX IF EXISTS idx_four_a;
+-- Удаляем старый индекс и создаем индекс по A и B
+CREATE INDEX IF NOT EXISTS idx_four_a_b ON four (a, b);
+
+-- Этот индекс может применяться отдельно по полю A
+EXPLAIN SELECT * FROM four WHERE a > 9900;
+
+-- Но не применяется по полю B, т.к. это поле стоит вторым в индексе
+EXPLAIN SELECT * FROM four WHERE b = 'HAWJPWXY';
+```
+
+```sql
+-- Для применения индекса для поиска по шаблону (%) требуется указать оператор VARCHAR_PATTERN_OPS
+CREATE INDEX IF NOT EXISTS idx_four_b ON four (b);
+EXPLAIN SELECT * FROM four WHERE b LIKE 'AAA%';
+
+DROP INDEX idx_four_b;
+CREATE INDEX IF NOT EXISTS idx_four_b ON four (b VARCHAR_PATTERN_OPS);
+
+EXPLAIN SELECT * FROM four WHERE b LIKE 'AAA%';
+```
+
+```sql
+-- Используется обратная сортировка по индексу
+EXPLAIN SELECT * FROM four ORDER BY a DESC;
+
+DROP INDEX IF EXISTS idx_four_a_b;
+EXPLAIN ANALYSE SELECT * FROM four ORDER BY a;
+
+-- Поле C разряженное (т.е. ~50% значений NULL), создаем индекс
+SELECT COUNT(*) FROM four WHERE c IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_four_c ON four (c);
+
+EXPLAIN SELECT * FROM four WHERE c > 400;
+
+SELECT indexname                                             AS name
+     , PG_SIZE_PRETTY(PG_RELATION_SIZE(indexname::REGCLASS)) AS size
+FROM pg_indexes
+WHERE tablename = 'four';
+
+DROP INDEX idx_four_c;
+CREATE INDEX IF NOT EXISTS idx_four_c ON four (c) WHERE c IS NOT NULL;
+```
+
 ### Оптимизация JOIN
+
+#### Hash Join
+
+Строим hash-таблицу из меньшей таблицы.
+
+```
+FOR i IN second_table
+    IF key_exists(hash(j))
+```
+
+|     Плюсы     |     Минусы     |    
+|---------------|----------------|
+| Не нужен индекс | Нужно много памяти |
+| | Долгое время получение первой строки (т.к. сначала требуется построение hash-таблицы) |
+
+```sql
+CREATE TABLE IF NOT EXISTS five
+(
+    d INT,
+    e BOOLEAN
+);
+
+TRUNCATE five;
+INSERT INTO five (d, e)
+SELECT s.id, s.id % 2 = 0
+FROM GENERATE_SERIES(1, 10000) AS s(id);
+
+ANALYSE five;
+
+DROP INDEX IF EXISTS idx_four_a_b, idx_four_a, idx_five_d;
+
+EXPLAIN VERBOSE
+SELECT fr.*
+FROM four fr
+    INNER JOIN five fv ON fr.a = fv.d
+WHERE fr.a > 100;
+```
 
 #### Nested loop
 
@@ -429,153 +557,29 @@ FOR i IN first_table
 | Не требует много памяти                                                   | Если по второй таблице идет сканирование по индексу, то получается быстро |
 | Если по второй таблице идет сканирование по индексу, то получается быстро |  |
 
-#### Hash Join
-
-Строим hash-таблицу из меньшей таблицы.
-
+```sql
+CREATE INDEX IF NOT EXISTS idx_four_a ON four (a);
+CREATE INDEX IF NOT EXISTS idx_five_d ON five (d);
+    
+EXPLAIN VERBOSE
+SELECT fr.*
+FROM four fr
+    INNER JOIN five fv ON fr.a = fv.d
+WHERE fr.a < 100;
 ```
-FOR i IN second_table
-    IF key_exists(hash(j))
-```
-
-|     Плюсы     |     Минусы     |    
-|---------------|----------------|
-| Не нужен индекс | Нужно много памяти |
-| | Долгое время получение первой строки (т.к. сначала требуется построение hash-таблицы) |
 
 #### Merge Join
 
 Каждая таблица упорядочивается по колонке, по которой идет соединение. После этого последовательно сканируются две
 таблицы и общие строки попадают в результат. Такого результата можно добиться, если строки соединения попадают в индекс.
 
-## EXPLAIN
-
-```postgresql
-CREATE EXTENSION tablefunc;
--- https://explain.depesz.com/
-
-DROP TABLE one CASCADE;
-CREATE TABLE IF NOT EXISTS one
-(
-    a INT,
-    b VARCHAR(80),
-    r INT,
-    f INT
-);
-
-DROP TABLE two;
-CREATE TABLE two
-(
-    c INT,
-    d BOOLEAN
-);
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-INSERT INTO one (a, b, r, f)
-SELECT i % 100, MD5(RANDOM()::TEXT), 40 + (RANDOM() * 200)::INT, normal_rand(1, 50, 10)
-FROM GENERATE_SERIES(1, 1000) AS i;
-
-ANALYSE one;
-
-EXPLAIN SELECT * FROM one WHERE a > 50;
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-INSERT INTO one (a, b, r, f)
-SELECT 1000 + i, MD5(RANDOM()::TEXT), 40 + (RANDOM() * 200)::INT, normal_rand(1, 50, 40)
-FROM GENERATE_SERIES(1, 10) AS i;
-
-EXPLAIN ANALYSE SELECT * FROM one;
-
-ANALYSE one;
-
-EXPLAIN SELECT * FROM one;
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_one_a ON one (a);
-EXPLAIN SELECT * FROM one WHERE a > 50;
-
-EXPLAIN SELECT * FROM one WHERE a > 90;
-
-EXPLAIN VERBOSE SELECT a FROM one WHERE a = 10;
-
-CREATE INDEX IF NOT EXISTS idx_one_f ON one (f);
-CREATE INDEX IF NOT EXISTS idx_one_f_a ON one (f, a);
-EXPLAIN SELECT f FROM one WHERE f = 10;
-
-EXPLAIN (ANALYSE, BUFFERS, VERBOSE )
-SELECT *
-FROM one
-WHERE a > 700;
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_one_b ON one (b);
-
-EXPLAIN SELECT * FROM one WHERE b LIKE 'abcd%';
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-DROP INDEX idx_one_b;
-
-CREATE INDEX IF NOT EXISTS idx_one_b ON one (b TEXT_PATTERN_OPS);
-
-EXPLAIN SELECT * FROM one WHERE b LIKE 'abcd%';
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-EXPLAIN ANALYSE SELECT * FROM one ORDER BY a;
-
-DROP INDEX idx_one_a;
-
-EXPLAIN SELECT * FROM one ORDER BY a;
-EXPLAIN ANALYSE SELECT * FROM one ORDER BY a;
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
--- sudo sync && purge
-EXPLAIN (ANALYSE, BUFFERS, VERBOSE) SELECT * FROM one;
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-INSERT INTO two (c, d)
-SELECT i, i % 2 = 1
-FROM GENERATE_SERIES(1, 1000) AS i;
-
-ANALYSE two;
-
+```sql
 EXPLAIN VERBOSE
-SELECT *
-FROM one o
-    INNER JOIN two t ON o.f = t.c
-WHERE o.f < 10
-  AND t.c < 10;
--- for i in first_table
---   for j in second_table where second_table.i = i
-----------------------------------------------------------------
-----------------------------------------------------------------
-----------------------------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_one_a ON one (a);
-CREATE INDEX IF NOT EXISTS idx_two_c ON two (c);
-
-SET work_mem TO '2MB';
-SET enable_seqscan TO ON;
-
-EXPLAIN (ANALYSE, VERBOSE)
-SELECT o.a
-FROM two t
-    INNER JOIN one o ON o.a = t.c
-WHERE o.a < 100
-  AND t.c < 100;
-
-EXPLAIN (VERBOSE)
-SELECT o.a
-FROM one o
-    INNER JOIN two t ON t.c = o.a
-WHERE o.a < 100
-  AND t.c < 100;
+SELECT fr.*
+FROM four fr
+    INNER JOIN five fv ON fr.a = fv.d
+WHERE fr.a < 1000
+  AND fv.d < 100;
 ```
 
 ## Статистика выполнения
@@ -591,13 +595,13 @@ WHERE o.a < 100
 
 Оценочное количество страниц и записей:
 
-```postgresql
+```sql
 SELECT reltuples, relpages FROM pg_class WHERE relname = 'one';
 ```
 
 Статистическая информация:
 
-```postgresql
+```sql
 SELECT * FROM pg_stats WHERE tablename = 'one' AND attname = 'a';
 ```
 
@@ -624,39 +628,39 @@ SELECT * FROM pg_stats WHERE tablename = 'one' AND attname = 'a';
 (1 - sum(most_common_freqs)) / (num_distinct - num(most_common_vals))
 ```
 
-```postgresql
-DROP TABLE four;
-CREATE TABLE IF NOT EXISTS four
+```sql
+DROP TABLE six;
+CREATE TABLE IF NOT EXISTS six
 (
     a INT,
     b VARCHAR(10),
     c INT
 );
 
-TRUNCATE four;
-INSERT INTO four(a, b, c)
+TRUNCATE six;
+INSERT INTO six(a, b, c)
 SELECT s.id, random_string(1), (RANDOM() * 500)::INT
 FROM GENERATE_SERIES(1, 100000) AS s(id);
 
-ANALYSE four;
+ANALYSE six;
 
-SELECT * FROM pg_stats WHERE tablename = 'four';
+SELECT * FROM pg_stats WHERE tablename = 'six';
 ```
 
 ##### Запрос без условия
 
-```postgresql
-EXPLAIN SELECT * FROM four;
+```sql
+EXPLAIN SELECT * FROM six;
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1541.00 rows=100000 width=11)
+Seq Scan on six  (cost=0.00..1541.00 rows=100000 width=11)
 ```
 
 `rows` == `reltuples`
 
-```postgresql
-SELECT reltuples, relpages FROM pg_class WHERE relname = 'four';
+```sql
+SELECT reltuples, relpages FROM pg_class WHERE relname = 'six';
 ```
 
 | reltuples | relpages |
@@ -665,11 +669,11 @@ SELECT reltuples, relpages FROM pg_class WHERE relname = 'four';
 
 ##### Вычисление по `histogram_bounds`
 
-```postgresql
-ALTER TABLE four
+```sql
+ALTER TABLE six
     ALTER COLUMN a SET STATISTICS 10;
 
-ANALYSE four;
+ANALYSE six;
 
 SELECT null_frac
      , n_distinct
@@ -677,7 +681,7 @@ SELECT null_frac
      , most_common_freqs
      , histogram_bounds
 FROM pg_stats
-WHERE tablename = 'four'
+WHERE tablename = 'six'
   AND attname = 'a';
 
 ```
@@ -690,15 +694,15 @@ WHERE tablename = 'four'
 | `most_common_freqs` |  null |
 | `histogram_bounds`  | {1,10149,20413,30398,40358,50596,60352,70186,80247,89994,100000} |
 
-```postgresql
-EXPLAIN SELECT * FROM four WHERE a <= 25000;
+```sql
+EXPLAIN SELECT * FROM six WHERE a <= 25000;
 ```
 
 Предполагается, что внутри гистограммы линейное распределение значений. Обрабатывается часть гистограммы, которая
 соответствует условию (`1-10149`, `10149-20413`, количество полных интервалов = 2).
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=24594 width=11)
+Seq Scan on six  (cost=0.00..1791.00 rows=24594 width=11)
   Filter: (a <= 25000)
 
 selectivity = ((количество полных интервалов) + (current - bucket[3].min)/(bucket[3].max - bucket[3].min)) / num_buckets =
@@ -711,14 +715,14 @@ rows = reltuples * selectivity = 10000 * 0.24593890836 ~= 24594
 
 Если значение попадает в `most_common_vals`, то просто берется соответствующее значение из `most_common_freqs`.
 
-```postgresql
+```sql
 SELECT null_frac
      , n_distinct
      , most_common_vals
      , most_common_freqs
      , histogram_bounds
 FROM pg_stats
-WHERE tablename = 'four'
+WHERE tablename = 'six'
   AND attname = 'b';
 ```
 
@@ -730,12 +734,12 @@ WHERE tablename = 'four'
 | `most_common_freqs` | {0.04100000113248825,0.03999999910593033,0.03983333334326744,0.03946666792035103,0.03933333232998848,0.039133332669734955,0.03906666487455368,0.03896666690707207,0.038866665214300156,0.03876666724681854,0.038733333349227905,0.038466665893793106,0.03843333199620247,0.03830000013113022,0.03830000013113022,0.03826666623353958,0.038233332335948944,0.03813333436846733,0.03776666522026062,0.037566665560007095,0.03739999979734421,0.03736666589975357,0.03736666589975357,0.037300001829862595,0.037166666239500046,0.036766666918992996} |
 | `histogram_bounds`  |  null |
 
-```postgresql
-EXPLAIN SELECT * FROM four WHERE b = 'A';
+```sql
+EXPLAIN SELECT * FROM six WHERE b = 'A';
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=3933 width=11)
+Seq Scan on six  (cost=0.00..1791.00 rows=3933 width=11)
   Filter: ((b)::text = 'A'::text)
         
 index of 'A' in most_common_vals = 5
@@ -751,11 +755,11 @@ rows = reltuples * selectivity = 10000 * 0.03933333232998848 ~= 3933
 Эти вычисления основаны на предположении, что значения, которые не входят в список `most_common_vals`, имеют равномерное
 распределение.
 
-```postgresql
-ALTER TABLE four
+```sql
+ALTER TABLE six
     ALTER COLUMN b SET STATISTICS 10;
 
-ANALYSE four;
+ANALYSE six;
 
 SELECT null_frac
      , n_distinct
@@ -763,7 +767,7 @@ SELECT null_frac
      , most_common_freqs
      , histogram_bounds
 FROM pg_stats
-WHERE tablename = 'four'
+WHERE tablename = 'six'
   AND attname = 'b';
 ```
 
@@ -777,12 +781,12 @@ WHERE tablename = 'four'
 
 `L` отсутствует в `most_common_vals`.
 
-```postgresql
-EXPLAIN SELECT * FROM four WHERE b = 'L';
+```sql
+EXPLAIN SELECT * FROM six WHERE b = 'L';
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=3813 width=11)
+Seq Scan on six  (cost=0.00..1791.00 rows=3813 width=11)
   Filter: ((b)::text = 'L'::text)
 
 selectivity = (1 - sum(most_common_freqs)) / (n_distinct - length(most_common_values)) =
@@ -792,7 +796,7 @@ rows = reltuples * selectivity = 10000 * 0.038128125 ~= 3813
 
 sum(m) = SELECT (SELECT sum(mcf) FROM unnest(stat.most_common_freqs) mcf) AS sum_mcf 
          FROM pg_stats stat
-         WHERE stat.tablename = 'four'
+         WHERE stat.tablename = 'six'
             AND stat.attname = 'b';
 ```
 
@@ -807,11 +811,11 @@ sum(m) = SELECT (SELECT sum(mcf) FROM unnest(stat.most_common_freqs) mcf) AS sum
 selectivity = mcv_selectivity + histogram_selectivity * histogram_fraction
 ```
 
-```postgresql
-ALTER TABLE four
+```sql
+ALTER TABLE six
     ALTER COLUMN c SET STATISTICS 10;
 
-ANALYSE four;
+ANALYSE six;
 
 SELECT null_frac
      , n_distinct
@@ -819,7 +823,7 @@ SELECT null_frac
      , most_common_freqs
      , histogram_bounds
 FROM pg_stats
-WHERE tablename = 'four'
+WHERE tablename = 'six'
   AND attname = 'c';
 ```
 
@@ -837,12 +841,12 @@ WHERE tablename = 'four'
 для оценки избирательности для той части таблицы, которая не содержит значения из списка MCV, а затем эти две цифры
 складываются для оценки общей избирательности.
 
-```postgresql
-EXPLAIN SELECT * FROM four WHERE c > 200;
+```sql
+EXPLAIN SELECT * FROM six WHERE c > 200;
 ```
 
 ```
-Seq Scan on four  (cost=0.00..1791.00 rows=60141 width=10)
+Seq Scan on six  (cost=0.00..1791.00 rows=60141 width=10)
   Filter: (c > 200)
   
 // Сумма все most_common_freqs, для которых их значение в most_common_vals удовлетворяет условию поиска
@@ -850,7 +854,7 @@ mvc_selectivity = SELECT SUM(r.mcf)
                   FROM pg_stats stat
                      , ROWS FROM (UNNEST(stat.most_common_vals::TEXT::INT[]),
                       UNNEST(stat.most_common_freqs)) r(mcv, mcf)
-                  WHERE tablename = 'four'
+                  WHERE tablename = 'six'
                     AND attname = 'c'
                     AND r.mcv > 200;
 
@@ -864,7 +868,7 @@ histogram_selectivity = ((количество полных интервалов
 histogram_fraction = 1 - sum(most_common_freqs)
 histogram_fraction = SELECT 1 - (SELECT sum(mcf) FROM unnest(stat.most_common_freqs) mcf) AS sum_mcf
                      FROM pg_stats stat
-                     WHERE stat.tablename = 'four'
+                     WHERE stat.tablename = 'six'
                        AND stat.attname = 'c';
 
 histogram_fraction = 0.9735666643828154    
