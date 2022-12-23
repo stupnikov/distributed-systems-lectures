@@ -4,7 +4,7 @@
 
 Студенты (`students`), Курсы (`courses`), Оценки (`course_grades`).
 
-```postgresql
+```sql
 DROP TABLE IF EXISTS course_grades;
 DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS courses;
@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS courses;
       изменении связанных строк в главной таблице и генерирует ошибку. (Главным отличием этих двух вариантов является
       то, что `NO ACTION` позволяет отложить проверку в процессе транзакции, а `RESTRICT` — нет)
 
-```postgresql
+```sql
 CREATE TABLE students
 (
     id        SERIAL PRIMARY KEY,
@@ -65,7 +65,7 @@ CREATE INDEX idx_course_grades_student_id ON course_grades (student_id);
 * `COPY ... FROM ... CSV` – вставка из csv файла (файл лежит внутри контейнера postgres).
 * `INSERT INTO ... SELECT` – вставка в таблицу результата select.
 
-```postgresql
+```sql
 COPY students (lastname, firstname, github, "group")
     FROM '/opt/data/students.csv'
     DELIMITER ';'
@@ -105,7 +105,7 @@ WHERE c.id = 1;
 
 Количество студентов, у которых средний бал больше 4.2.
 
-```postgresql
+```sql
 SELECT s.firstname || ' ' || s.lastname AS student_name
      , AVG(cg.grade)                    AS average_grade
 FROM course_grades cg
@@ -116,7 +116,7 @@ HAVING AVG(cg.grade) > 4.2;
 
 Студенты, у которых есть хотя бы одна тройка.
 
-```postgresql
+```sql
 -- с использованием DISTINCT
 SELECT DISTINCT s.firstname || ' ' || s.lastname AS student_name
 FROM course_grades cg
@@ -135,7 +135,7 @@ GROUP BY student_name;
 
 Вывести всех студентов, у которых есть хотя бы одна пятерка.
 
-```postgresql
+```sql
 SELECT s.firstname || ' ' || s.lastname AS student_name
 FROM students s
 WHERE EXISTS(SELECT 1 FROM course_grades cg WHERE cg.student_id = s.id AND cg.grade = 5)
@@ -149,7 +149,7 @@ aggregates functions executed for each group same as simple `GROUP BY` clauses, 
 
 Вывести средний бал всех студентов и средний бал по группе:
 
-```postgresql
+```sql
 SELECT s.firstname || ' ' || s.lastname AS student_name
      , s.group                          AS "group"
      , AVG(cg.grade)                    AS average_grade
@@ -160,7 +160,7 @@ GROUP BY GROUPING SETS ((student_name, s.group), (s.group));
 
 Аналогично решению через `UNION ALL`:
 
-```postgresql
+```sql
 SELECT s.firstname || ' ' || s.lastname AS student_name
      , AVG(cg.grade)                    AS average_grade
 FROM students s
@@ -180,7 +180,7 @@ GROUP BY "group"
 
 Вывести список группы ИУ7-11М с пагинацией по 10 записей.
 
-```postgresql
+```sql
 SELECT s.*
 FROM students s
 WHERE s."group" = 'ИУ7-11М'
@@ -188,7 +188,7 @@ ORDER BY s.lastname, s.firstname
 LIMIT 10 OFFSET 10;
 ```
 
-```postgresql
+```sql
 SELECT s.*
 FROM students s
 WHERE s."group" = 'ИУ7-11М'
@@ -197,7 +197,7 @@ ORDER BY s.lastname, s.firstname
 LIMIT 10;
 ```
 
-```postgresql
+```sql
 SELECT s.*
 FROM students s
 WHERE s."group" = 'ИУ7-11М'
@@ -213,7 +213,7 @@ OFFSET 10 ROWS;
 
 Вывести количество 2, 3, 4 и 5 в разрезе групп:
 
-```postgresql
+```sql
 SELECT s."group"                                            AS "group"
      , SUM(CASE WHEN FLOOR(cg.grade) = 2 THEN 1 ELSE 0 END) AS "2"
      , SUM(CASE WHEN FLOOR(cg.grade) = 3 THEN 1 ELSE 0 END) AS "3"
@@ -225,7 +225,7 @@ WHERE cg.course_id = (SELECT c.id FROM courses c WHERE c.name = 'РСОИ')
 GROUP BY "group";
 ```
 
-```postgresql
+```sql
 SELECT s."group"                                   AS "group"
      , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 2) AS "2"
      , COUNT(1) FILTER (WHERE FLOOR(cg.grade) = 3) AS "3"
@@ -239,7 +239,7 @@ GROUP BY "group";
 
 ### Inline View
 
-```postgresql
+```sql
 WITH student_avg_grade AS (
     SELECT s.firstname || ' ' || s.lastname AS student_name
          , AVG(cg.grade)                    AS average_grade
@@ -259,7 +259,7 @@ WHERE sag.average_grade > 4.2;
 
 `CREATE TABLE ... (LIKE ...)` – создание таблицы на основе DDL другой таблицы.
 
-```postgresql
+```sql
 CREATE TABLE students_history
 (
     LIKE students
@@ -302,7 +302,7 @@ SELECT delete_students(ARRAY [1, 2, 3]);
 
 Рекурсивное вычисление факториала.
 
-```postgresql
+```sql
 WITH RECURSIVE fact (n, factorial) AS (
     SELECT 1::NUMERIC
          , 1::NUMERIC
@@ -320,7 +320,7 @@ FROM fact;
 
 Вычисление чисел Фибоначчи:
 
-```postgresql
+```sql
 WITH RECURSIVE fib(a, b) AS (
     SELECT 0::NUMERIC
          , 1::NUMERIC
@@ -337,7 +337,7 @@ FROM fib;
 
 `WITH RECURSIVE` можно применять для обхода дерева:
 
-```postgresql
+```sql
 DROP TABLE IF EXISTS geo;
 CREATE TABLE geo
 (
@@ -348,7 +348,7 @@ CREATE TABLE geo
 );
 ```
 
-```postgresql
+```sql
 INSERT INTO geo (id, parent_id, name)
 VALUES (1, NULL, 'Планета Земля')
      , (2, 1, 'Евразия')
@@ -361,7 +361,7 @@ VALUES (1, NULL, 'Планета Земля')
      , (9, 6, 'Берлин');
 ```
 
-```postgresql
+```sql
 WITH RECURSIVE recursive AS (
     SELECT g.id        AS id
          , g.parent_id AS parent
@@ -393,7 +393,7 @@ FROM recursive;
 Когда запрос обращается к `MATERIALIZED VIEW`, данные возвращаются непосредственно из него, как из таблицы; запрос
 применяется, только чтобы его наполнить, поэтому данные в нем могут быть не актуальные.
 
-```postgresql
+```sql
 DROP MATERIALIZED VIEW average_grade_by_groups;
 
 CREATE MATERIALIZED VIEW average_grade_by_groups AS
@@ -463,7 +463,7 @@ table expression) is evaluated once only.
 
 Найти какой предмет студент сдал лучше всего.
 
-```postgresql
+```sql
 SELECT s.firstname || ' ' || s.lastname                       AS student_name
      , s."group"                                              AS "group"
      , cg.grade                                               AS grade
@@ -525,7 +525,7 @@ ORDER BY "group", student_name, grade DESC;
 
 В каждой группе вывести топ 3 студентов по РСОИ.
 
-```postgresql
+```sql
 SELECT cg.*
 FROM (SELECT cg.grade                                                          AS grade
            , s.firstname || ' ' || s.lastname                                  AS student_name
@@ -539,7 +539,7 @@ WHERE cg.rn <= 3;
 
 Вывести среднюю оценку по группе по курсу РСОИ:
 
-```postgresql
+```sql
 SELECT r."group"       AS "group"
      , r.average_grade AS average_grade
 FROM (SELECT s.group
@@ -564,7 +564,7 @@ ORDER BY average_grade DESC;
 * `DO UPDATE SET field = EXCLUDED.field ` – обновить значения поля данными из блока `VALUES`;
 * `DO NOTHING` – ничего не делать;
 
-```postgresql
+```sql
 INSERT INTO students (firstname, lastname, github, "group")
 VALUES ('Alexey', 'Romanov', 'gryteck', 'ИУ7-13М')
 ON CONFLICT(github) DO UPDATE SET firstname = excluded.firstname
@@ -584,13 +584,13 @@ SELECT * FROM students WHERE id = 1;
 вернёт, если она была удалена). Режим блокировки `FOR UPDATE` также запрашивается на уровне строки любой
 командой `DELETE` и командой `UPDATE`, изменяющей значения определённых столбцов.
 
-```postgresql
+```sql
 BEGIN TRANSACTION;
 SELECT * FROM students s WHERE id = 1 FOR UPDATE;
 END TRANSACTION;
 ```
 
-```postgresql
+```sql
 UPDATE students
 SET github = 'romanow'
 WHERE lastname = 'Романов'
@@ -602,7 +602,7 @@ WHERE lastname = 'Романов'
 Postgres позволяет определять столбцы таблицы как многомерные массивы переменной длины. Элементами массивов могут быть
 любые встроенные или определённые пользователями базовые типы, перечисления, составные типы;
 
-```postgresql
+```sql
 CREATE TABLE array_table
 (
     arr INT[]
@@ -629,7 +629,7 @@ SELECT UNNEST(t.arr) FROM array_table t;
 обработку, не требуя многократного разбора текста. Кроме того, `jsonb` поддерживает индексацию, что тоже может быть
 очень полезно.
 
-```postgresql
+```sql
 CREATE TABLE json_table
 (
     data JSONB
