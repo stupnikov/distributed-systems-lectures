@@ -10,8 +10,8 @@ CREATE OR REPLACE FUNCTION random_string(length INT)
 $$
 BEGIN
     RETURN (
-        SELECT STRING_AGG(SUBSTR('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-                                 CEIL(RANDOM() * 62)::INTEGER, 1), '')
+        SELECT STRING_AGG(SUBSTR('ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                                 CEIL(RANDOM() * 26)::INTEGER, 1), '')
         FROM GENERATE_SERIES(1, length)
     );
 END;
@@ -642,6 +642,44 @@ WHERE fr.a < 1000
   AND fv.d < 100;
 ```
 
+### Поддержание индексов
+
+##### Сводная информация об индексах
+
+```sql
+SELECT pg_class.relname
+     , PG_SIZE_PRETTY(pg_class.reltuples::BIGINT)          AS rows_in_bytes
+     , pg_class.reltuples                                  AS num_rows
+     , COUNT(*)                                            AS total_indexes
+     , COUNT(*) FILTER (WHERE indisunique)                 AS unique_indexes
+     , COUNT(*) FILTER (WHERE indnatts = 1 )               AS single_column_indexes
+     , COUNT(*) FILTER (WHERE indnatts IS DISTINCT FROM 1) AS multi_column_indexes
+FROM pg_namespace
+    LEFT JOIN pg_class ON pg_namespace.oid = pg_class.relnamespace
+    LEFT JOIN pg_index ON pg_class.oid = pg_index.indrelid
+WHERE pg_namespace.nspname = 'public'
+  AND pg_class.relkind = 'r'
+GROUP BY pg_class.relname, pg_class.reltuples
+ORDER BY pg_class.reltuples DESC;
+```
+
+##### Статистика использования индексов
+
+```sql
+SELECT idstat.relname                                             AS table_name
+     , indexrelname                                               AS index_name
+     , idstat.idx_scan                                            AS times_used
+     , PG_SIZE_PRETTY(PG_RELATION_SIZE(idstat.relname::REGCLASS)) AS table_size
+     , PG_SIZE_PRETTY(PG_RELATION_SIZE(indexrelname::REGCLASS))   AS index_size
+     , n_tup_upd + n_tup_ins + n_tup_del                          AS num_writes
+FROM pg_stat_user_indexes AS idstat
+    JOIN pg_indexes ON indexrelname = indexname
+    JOIN pg_stat_user_tables AS tabstat ON idstat.relname = tabstat.relname
+WHERE idstat.idx_scan < 200
+  AND indexdef !~* 'unique'
+ORDER BY idstat.relname, indexrelname;
+```
+
 ## Статистика выполнения
 
 Статистическая информация, собираемая Postgres, имеет большое влияние на производительность системы. Зная статистику
@@ -959,3 +997,4 @@ rows = reltuples * selectivity = 10000 * 0.60141374011 ~= 60141
 6. ["Под капотом" индексов Postgres](https://habr.com/xru/company/vk/blog/261871/)
 7. [Индексы в PostgreSQL. Как понять, что создавать](https://www.youtube.com/watch?v=ju9F8OvnL4E)
 8. [Антипаттерн orisnull: коварство иллюзорной простоты](https://www.youtube.com/watch?v=h927yUAdTD0)
+9. [Index Maintenance](https://wiki.postgresql.org/wiki/Index_Maintenance)
